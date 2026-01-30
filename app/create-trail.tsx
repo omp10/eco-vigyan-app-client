@@ -14,7 +14,7 @@ import {
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 // import MapViewDirections from 'react-native-maps-directions'; // Removed
 import { MaterialIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import { trailService, mushroomService, Mushroom } from '../services/api';
 import { mapService, LatLng } from '../services/mapService';  // Added mapService
@@ -42,9 +42,12 @@ function deg2rad(deg: number) {
   return deg * (Math.PI/180)
 }
 
-export default function CreateTrailScreen() {
+  export default function CreateTrailScreen() {
   const router = useRouter();
   const { user, isAuthenticated } = useAuth();
+  const params = useLocalSearchParams();
+  const skipLocation = params.skipLocation === 'true';
+
   const mapRef = useRef<MapView>(null);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -82,17 +85,23 @@ export default function CreateTrailScreen() {
     try {
       setLoadingMushrooms(true);
       
-      // Get user location for initial map focus
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        let location = await Location.getCurrentPositionAsync({});
-        setRegion({
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
-        });
+      // Get user location only if NOT skipping
+      if (!skipLocation) {
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          let location = await Location.getCurrentPositionAsync({});
+          setRegion({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+            latitudeDelta: 0.05,
+            longitudeDelta: 0.05,
+          });
+        }
+      } else {
+        // Just set a default view or relying on initial state
       }
+
+      // Load mushrooms inside here...
 
       // Load mushrooms
       console.log('Fetching all mushrooms for map...');
@@ -218,15 +227,17 @@ export default function CreateTrailScreen() {
         provider={PROVIDER_GOOGLE}
         style={styles.map}
         initialRegion={region}
-        showsUserLocation={true}
-        showsMyLocationButton={false}
+        showsUserLocation={!skipLocation}
+        showsMyLocationButton={!skipLocation}
       >
         {/* Draw Line between selected mushrooms */}
         {selectedMushrooms.length > 1 && routeCoordinates.length > 0 && (
           <Polyline
             coordinates={routeCoordinates}
-            strokeWidth={4}
-            strokeColor="#387a63"
+            strokeWidth={6}
+            strokeColor="#4285F4"
+            lineCap="round"
+            lineJoin="round"
           />
         )}
 

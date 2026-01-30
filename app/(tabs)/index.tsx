@@ -1,4 +1,7 @@
-import React from 'react';
+import { mushroomService, Mushroom } from '../../services/api';
+import { useRouter } from 'expo-router';
+import { useAuth } from '../../context/AuthContext';
+import { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -6,17 +9,75 @@ import { Image } from 'expo-image';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
-const { width } = Dimensions.get('window');
-
-// Asset URLs
 const ASSETS = {
   USER_PROFILE: "https://lh3.googleusercontent.com/aida-public/AB6AXuCgJSergt3fp5hGV5k8zPVfDuhsS4D-ieGOh00QRM7U_elz82mOcUPCNV5OkB3V4z7A9gxMSIC0mrPtECHHYnUUGVb6FTAnT-n8Cm5zKGrVA9zZMREm4cyGUu4CM_P2b_x4Wj_fX7shwLx1QXGFxuE5bflzLzUGI7seyILFqst2EV7mbp3EetSGqzkN9ZXljwnpQ1QbrTEJLCqI_1cXCuzYGk0geWxxdfUUwjwdtLqww0IjRv6bhM3zqxdLuchqnSNQ9r7linZXYwWb",
   FEATURE_FUNGI: "https://lh3.googleusercontent.com/aida-public/AB6AXuBkC9VRCxEhMvAdZHr4MSLLHBylvrMcsUmPNSECTjqacQlWcEwEhxZEIWKFl6SgwTWCgrx52Tu-x6O4udMXTqD-OhM_ZS0BdPkXD7cFssfzhU8D-Ur6So1APTTnQxLaIT_UlwfJEY0nqOWJMl1KM7HZ8Z3bWJha1Zc61X7hgizk0SeJZqtY6s7CgHXxk6wTvte_sEVmoXNUcCT8DiJI48glt9D-uxw9TLCMdAehXfG4RXUrOLgEMUoVZxYQjN4tcJYAf2dUPeHQ3MHm",
-  GUIDE_FOREST: "https://lh3.googleusercontent.com/aida-public/AB6AXuBj6IL3Z2Iub5L9H07G0SC8jvH8rp8T23DmPX-JuqwEN5vXIkJyLlsThC8VIWJTuprNjjXWQY967zbrasyMCYUZEQqg4iKxgqwyCOjVk8dSipM8QhDfBqI1mqaEl5dHJuQl4xGw07jemjLHrha_GsLSCEldnqKoH9yyyXtZEHRfXpwO0ss8mI2E6nRiMWsjYsJ5jZrHCq-83KkihYshz0ytF001CnNje9XV-0rrzJH9PznDnskmanzc4RQGjGF4TDza0np48aFKr0Uo",
-  GUIDE_FIELD: "https://lh3.googleusercontent.com/aida-public/AB6AXuBfw4xyrwCLK7WJFyLlexwPRbuER9Tj5wBHKiyMiZmnQBHsmoECKvNGgNJ8kL2lT3yUDfkqdmD2cEgfJRcxk9sw1llmW-ZkrA9qRhJLomdhv8GQRU41gjelOoihck468CMhuT6VyT0t_UrQNZ8I2Xrtcp_led7EAa-PuTENR2ml058FQaAec9WzV-L7WkoY10eEPJTGbGH1jpsRVvbznABd7nOODIBKeykh2ZV73Q1dPipe3idDqkozQfKf0NLGlFzYE4tBTyEF7_1D"
 };
 
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api';
+const BASE_URL = API_URL.endsWith('/api') ? API_URL.slice(0, -4) : API_URL;
+
+function getFungusImageUrl(url?: string) {
+  if (!url) return 'https://via.placeholder.com/150';
+  if (url.startsWith('http')) return url;
+  return `${BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+}
+
+// Simple time ago helper
+function timeAgo(dateParam: string | Date): string {
+  if (!dateParam) return '';
+  const date = typeof dateParam === 'object' ? dateParam : new Date(dateParam);
+  const today = new Date();
+  const seconds = Math.round((today.getTime() - date.getTime()) / 1000);
+  const minutes = Math.round(seconds / 60);
+  const isToday = today.toDateString() === date.toDateString();
+
+  if (seconds < 5) return 'just now';
+  else if (seconds < 60) return `${seconds} seconds ago`;
+  else if (seconds < 90) return 'about a minute ago';
+  else if (minutes < 60) return `${minutes} minutes ago`;
+  else if (isToday) return 'Today'; 
+  
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hours ago`;
+  
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days} days ago`;
+  
+  const months = Math.round(days / 30);
+  if (months < 12) return `${months} months ago`;
+  
+  const years = Math.round(days / 365);
+  return `${years} years ago`;
+}
+
 export default function HomeScreen() {
+  const { user } = useAuth();
+  const router = useRouter();
+  const [recentSightings, setRecentSightings] = useState<Mushroom[]>([]);
+  const [loadingSightings, setLoadingSightings] = useState(true);
+
+  useEffect(() => {
+    loadRecentSightings();
+  }, []);
+
+  const loadRecentSightings = async () => {
+    try {
+      setLoadingSightings(true);
+      const allMushrooms = await mushroomService.getAllMushrooms();
+      
+      const sorted = allMushrooms
+        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+        .slice(0, 5);
+      
+      setRecentSightings(sorted);
+    } catch (error) {
+      console.error("Failed to load sightings:", error);
+    } finally {
+      setLoadingSightings(false);
+    }
+  };
+
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-background-light dark:bg-background-dark">
       <StatusBar style="auto" />
@@ -28,7 +89,7 @@ export default function HomeScreen() {
             Eco Vigyan Foundation
           </Text>
           <Text className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-            Eco-Club Portal
+            Welcome, {user?.name?.split(' ')[0] || user?.username || 'Explorer'}!
           </Text>
         </View>
         <View className="flex-row items-center gap-3">
@@ -37,9 +98,13 @@ export default function HomeScreen() {
           </TouchableOpacity>
           <TouchableOpacity className="w-10 h-10 rounded-full border-2 border-primary/20 overflow-hidden">
             <Image 
-              source={{ uri: ASSETS.USER_PROFILE }} 
+              key={user?.dp?.url}
+              source={{ uri: user?.dp?.url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || user?.username || 'User')}&background=random&color=fff` }} 
               className="w-full h-full"
               contentFit="cover"
+              transition={200}
+              onError={(e) => console.log('Image Load Error:', e.error)}
+              cachePolicy="memory-disk"
             />
           </TouchableOpacity>
         </View>
@@ -48,7 +113,7 @@ export default function HomeScreen() {
       <ScrollView 
         className="flex-1"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 }} // Space for bottom nav
+        contentContainerStyle={{ paddingBottom: 100 }} 
       >
         {/* Quote Section */}
         <View className="px-6 mb-6">
@@ -110,66 +175,69 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Nature Guide Section */}
+        {/* Recent Sightings Section (Replaces Nature Guide) */}
         <View className="px-6 mb-8">
           <View className="flex-row items-center justify-between mb-4">
             <Text className="text-lg font-bold text-slate-900 dark:text-white">
-              Nature Guide for Educators
+              Recent Sightings
             </Text>
-            <TouchableOpacity>
-              <Text className="text-primary text-sm font-bold">View Curriculum</Text>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/explore')}>
+              <Text className="text-primary text-sm font-bold">View Map</Text>
             </TouchableOpacity>
           </View>
 
           <View className="gap-4">
-            {/* Guide Card 1 */}
-            <View className="flex-row items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
-              <View className="w-16 h-16 rounded-xl overflow-hidden shrink-0">
-                <Image 
-                  source={{ uri: ASSETS.GUIDE_FOREST }} 
-                  className="w-full h-full"
-                  contentFit="cover"
-                />
-              </View>
-              <View className="flex-1">
-                <Text className="font-bold text-sm text-slate-900 dark:text-white">Forest Ecology 101</Text>
-                <Text className="text-[11px] text-slate-500 mb-2">Lesson plans for middle school clubs</Text>
-                <View className="flex-row gap-2">
-                  <View className="px-2 py-0.5 bg-primary-light rounded-full">
-                    <Text className="text-primary text-[9px] font-bold uppercase">PDF</Text>
-                  </View>
-                  <View className="px-2 py-0.5 bg-primary-light rounded-full">
-                    <Text className="text-primary text-[9px] font-bold uppercase">Video</Text>
-                  </View>
-                </View>
-              </View>
-              <TouchableOpacity className="w-8 h-8 flex items-center justify-center bg-slate-100 dark:bg-slate-700 rounded-full">
-                <MaterialIcons name="download" size={18} color="#64748b" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Guide Card 2 */}
-            <View className="flex-row items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
-              <View className="w-16 h-16 rounded-xl overflow-hidden shrink-0">
-                <Image 
-                  source={{ uri: ASSETS.GUIDE_FIELD }} 
-                  className="w-full h-full"
-                  contentFit="cover"
-                />
-              </View>
-              <View className="flex-1">
-                <Text className="font-bold text-sm text-slate-900 dark:text-white">Field Identification Guide</Text>
-                <Text className="text-[11px] text-slate-500 mb-2">Safe foraging & identification practices</Text>
-                <View className="flex-row gap-2">
-                  <View className="px-2 py-0.5 bg-primary-light rounded-full">
-                    <Text className="text-primary text-[9px] font-bold uppercase">Interactive</Text>
-                  </View>
-                </View>
-              </View>
-              <TouchableOpacity className="w-8 h-8 flex items-center justify-center bg-slate-100 dark:bg-slate-700 rounded-full">
-                <MaterialIcons name="chevron-right" size={20} color="#64748b" />
-              </TouchableOpacity>
-            </View>
+            {loadingSightings ? (
+               <View className="py-8 items-center">
+                 <Text className="text-slate-400">Loading recent observations...</Text>
+               </View>
+            ) : recentSightings.length === 0 ? (
+               <Text className="text-slate-400 italic">No recent sightings yet.</Text>
+            ) : (
+                recentSightings.map((mushroom) => (
+                  <TouchableOpacity 
+                    key={mushroom._id} 
+                    onPress={() => router.push(`/mushroom/${mushroom._id}` as any)}
+                    className="flex-row items-center gap-4 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-700/50 shadow-sm active:opacity-70"
+                  >
+                    <View className="w-16 h-16 rounded-xl overflow-hidden shrink-0 bg-slate-100">
+                      <Image 
+                        source={{ uri: getFungusImageUrl(mushroom.thumbnail || mushroom.images?.[0]?.url) }} 
+                        className="w-full h-full"
+                        contentFit="cover"
+                        transition={200}
+                      />
+                    </View>
+                    <View className="flex-1 justify-center">
+                      <Text className="font-bold text-sm text-slate-900 dark:text-white" numberOfLines={1}>
+                        {mushroom.commonName || "Unknown Species"}
+                      </Text>
+                      <Text className="text-xs text-slate-500 italic mb-1" numberOfLines={1}>
+                        {mushroom.scientificName}
+                      </Text>
+                      <View className="flex-row items-center gap-2">
+                        <View className="flex-row items-center gap-1">
+                          <MaterialIcons name="person-outline" size={12} color="#94a3b8" />
+                          <Text className="text-[10px] text-slate-400">
+                            {mushroom.submittedBy?.username || "Unknown"}
+                          </Text>
+                        </View>
+                        <Text className="text-[10px] text-slate-300">•</Text>
+                         <View className="flex-row items-center gap-1">
+                          <MaterialIcons name="access-time" size={12} color="#94a3b8" />
+                          <Text className="text-[10px] text-slate-400">
+                            {/* Use custom timeAgo instead of date-fns */}
+                            {mushroom.createdAt ? timeAgo(mushroom.createdAt) : "Recently"}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                    <View className="w-8 h-8 flex items-center justify-center bg-slate-50 dark:bg-slate-700 rounded-full border border-slate-100">
+                      <MaterialIcons name="chevron-right" size={20} color="#64748b" />
+                    </View>
+                  </TouchableOpacity>
+                ))
+            )}
           </View>
         </View>
 

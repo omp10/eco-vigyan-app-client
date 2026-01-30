@@ -40,10 +40,11 @@ function deg2rad(deg: number) {
   return deg * (Math.PI/180)
 }
 
-export default function ActiveTrailScreen() {
+  export default function ActiveTrailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const trailId = params.trailId as string; // We need to pass trailId or entire trail object
+  const trailId = params.trailId as string; 
+  const skipLocation = params.skipLocation === 'true';
 
   const mapRef = useRef<MapView>(null);
   
@@ -61,7 +62,10 @@ export default function ActiveTrailScreen() {
 
   useEffect(() => {
     loadTrail();
-    startLocationTracking();
+    // REMOVED: Automatic startLocationTracking
+    // if (!skipLocation) {
+    //   startLocationTracking();
+    // }
   }, [trailId]);
 
   // Effect to handle Preview Mode vs Navigation Mode Camera
@@ -69,15 +73,10 @@ export default function ActiveTrailScreen() {
      if (!mapRef.current || !trail || !trail.mushrooms || trail.mushrooms.length === 0) return;
 
      if (!isNavigationStarted) {
-         // PREVIEW MODE: Zoom to fit User + First Mushroom
-         const coordsToFit = [trail.mushrooms[0].location];
-         if (userLocation) {
-             coordsToFit.push({
-                 latitude: userLocation.coords.latitude,
-                 longitude: userLocation.coords.longitude
-             });
-         }
-
+         // PREVIEW MODE: Zoom to fit WHOLE TRAIL
+         const coordsToFit = trail.mushrooms.map((m: any) => m.location);
+         
+         // Add some padding manually if only 1 point? map handles array fine.
          mapRef.current.fitToCoordinates(coordsToFit, {
              edgePadding: { top: 100, right: 50, bottom: 200, left: 50 },
              animated: true
@@ -99,18 +98,16 @@ export default function ActiveTrailScreen() {
   }, [isNavigationStarted, trail, userLocation == null]); // Trigger when these change
 
   const loadTrail = async () => {
+    /* ... existing loadTrail ... */
     try {
       setLoading(true);
       let loadedTrail = null;
       if (params.trailData) {
-        // If passed as param (stringified)
         loadedTrail = JSON.parse(params.trailData as string);
         setTrail(loadedTrail);
         setLoading(false);
       } else {
-        // Fetch from ID (Need to add getTrailById to service if not exists, or just filter from all for now)
          const trails = await trailService.getAllTrails();
-         // Temporary find, ideally specific endpoint
          const found = trails.find((t: any) => t._id === trailId);
          if (found) {
             setTrail(found);
@@ -122,7 +119,6 @@ export default function ActiveTrailScreen() {
          setLoading(false);
       }
 
-      // Fetch the full trail route once loaded
       if (loadedTrail && loadedTrail.mushrooms.length > 1) {
           const origin = loadedTrail.mushrooms[0].location;
           const destination = loadedTrail.mushrooms[loadedTrail.mushrooms.length - 1].location;
@@ -144,13 +140,19 @@ export default function ActiveTrailScreen() {
     }
   };
 
-  const startLocationTracking = async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission denied', 'Location permission is required for navigation');
-      return;
-    }
+  const handleStartNavigation = async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission denied', 'Location permission is required for navigation');
+        return;
+      }
 
+      setIsNavigationStarted(true);
+      startLocationTracking();
+  };
+
+  const startLocationTracking = async () => {
+    // Permission already checked in handleStartNavigation
     await Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.BestForNavigation,
@@ -160,16 +162,15 @@ export default function ActiveTrailScreen() {
       (location) => {
         setUserLocation(location);
 
-        // Animate camera ONLY if navigation has started
-        if (isNavigationStarted && mapRef.current) {
+        if (mapRef.current) {
             mapRef.current.animateCamera({
                 center: {
                     latitude: location.coords.latitude,
                     longitude: location.coords.longitude,
                 },
-                pitch: 50, // Tilt the map
-                heading: location.coords.heading || 0, // Rotate map with user
-                zoom: 19, // Zoom in close
+                pitch: 50, 
+                heading: location.coords.heading || 0,
+                zoom: 19,
                 altitude: 100 
             }, { duration: 1000 });
         }
@@ -238,7 +239,7 @@ export default function ActiveTrailScreen() {
           latitudeDelta: 0.005, // Zoomed in closer by default
           longitudeDelta: 0.005,
         }}
-        showsUserLocation={true}
+        showsUserLocation={!skipLocation}
         followsUserLocation={false} // We handle camera manually for navigation mode
       >
         {/* Trail Route */}
@@ -247,16 +248,21 @@ export default function ActiveTrailScreen() {
             coordinates={trailCoordinates}
             strokeWidth={4}
             strokeColor="#387a63"
+            lineCap="round"
+            lineJoin="round"
           />
         )}
 
         {/* User to Next Stop Routing */}
         {userPathCoordinates.length > 0 && (
            <Polyline
+             key="user-path"
              coordinates={userPathCoordinates}
-             strokeWidth={3}
-             strokeColor="#f59e0b"
-             lineDashPattern={[5, 5]}
+             strokeWidth={6}
+             strokeColor="#4285F4"
+             lineCap="round"
+             lineJoin="round"
+             zIndex={100}
            />
         )}
 
@@ -314,7 +320,7 @@ export default function ActiveTrailScreen() {
               <Text style={styles.targetLabel}>TARGET SPECIMEN</Text>
               <Text style={styles.mushroomName}>{currentMushroom.commonName || 'Unknown'}</Text>
               <Text style={styles.scientificName}>{currentMushroom.scientificName}</Text>
-              {distanceToNext !== null && (
+              {!skipLocation && distanceToNext !== null && (
                 <View style={styles.distanceBadge}>
                   <MaterialIcons name="directions-walk" size={14} color="#387a63" />
                   <Text style={styles.distanceText}>
@@ -343,15 +349,15 @@ export default function ActiveTrailScreen() {
                     {mapService.calculateTotalDistance(trail.mushrooms.map((m:any) => m.location)).toFixed(1)} km trail • {trail.mushrooms.length} stops
                 </Text>
                 <Text style={styles.previewInstruction}>
-                    Go to the start point shown on the map.
+                    {skipLocation ? "Explore the trail stops manually." : "Go to the start point shown on the map."}
                 </Text>
             </View>
             <TouchableOpacity 
                 style={styles.startNavBtn} 
-                onPress={() => setIsNavigationStarted(true)}
+                onPress={handleStartNavigation}
             >
-                <MaterialIcons name="navigation" size={24} color="#fff" />
-                <Text style={styles.startNavBtnText}>Start Navigation</Text>
+                <MaterialIcons name={skipLocation ? "map" : "navigation"} size={24} color="#fff" />
+                <Text style={styles.startNavBtnText}>{skipLocation ? "Start Tour" : "Start Navigation"}</Text>
             </TouchableOpacity>
         </View>
       )}
