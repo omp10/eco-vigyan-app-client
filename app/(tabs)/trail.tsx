@@ -18,7 +18,7 @@ export default function TrailScreen() {
   const [loading, setLoading] = useState(true);
   
   // Modal States
-  const [createModalVisible, setCreateModalVisible] = useState(false);
+  /* Removed createModalVisible */
   /* Removed Load Modal State */
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [selectedTrail, setSelectedTrail] = useState<any>(null);
@@ -43,16 +43,8 @@ export default function TrailScreen() {
     }
   };
 
-  const startCreateTrail = (skipLocation: boolean) => {
-    setCreateModalVisible(false);
-    router.push({
-      pathname: '/create-trail',
-      params: { skipLocation: skipLocation ? 'true' : 'false' }
-    });
-  };
-
   const handleCreatePress = () => {
-    setCreateModalVisible(true);
+    router.push('/create-trail');
   };
 
   const handleTrailPress = (trail: any) => {
@@ -175,43 +167,7 @@ export default function TrailScreen() {
         )}
       </ScrollView>
 
-      {/* Create Trail Options Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={createModalVisible}
-        onRequestClose={() => setCreateModalVisible(false)}
-      >
-        <View className="flex-1 justify-end bg-black/50">
-          <View className="bg-white rounded-t-3xl p-6 gap-4">
-            <View className="flex-row justify-between items-center mb-2">
-              <Text className="text-xl font-bold text-slate-800">Create New Trail</Text>
-              <TouchableOpacity onPress={() => setCreateModalVisible(false)}>
-                <MaterialIcons name="close" size={24} color="#64748b" />
-              </TouchableOpacity>
-            </View>
-            <Text className="text-slate-500 mb-4">How would you like to create your trail?</Text>
-            
-            <TouchableOpacity 
-              className="bg-blue-600 p-4 rounded-xl flex-row items-center justify-center gap-3"
-              onPress={() => startCreateTrail(false)}
-            >
-              <MaterialIcons name="my-location" size={20} color="white" />
-              <Text className="text-white font-bold text-lg">Use Current Location</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              className="bg-blue-50 p-4 rounded-xl flex-row items-center justify-center gap-3 border border-blue-100"
-              onPress={() => startCreateTrail(true)}
-            >
-              <MaterialIcons name="add-location-alt" size={20} color="#2563eb" />
-              <Text className="text-blue-600 font-bold text-lg">Skip Location</Text>
-            </TouchableOpacity>
-            
-            <View className="h-4" />
-          </View>
-        </View>
-      </Modal>
+      {/* Create Trail Options Modal - REMOVED */}
 
       {/* Load Trail Options Modal - REMOVED */ }
 

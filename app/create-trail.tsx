@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   View, 
   Text, 
@@ -15,7 +15,7 @@ import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 // import MapViewDirections from 'react-native-maps-directions'; // Removed
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import * as Location from 'expo-location';
+// import * as Location from 'expo-location'; // Removed: Only required in active-trail
 import { trailService, mushroomService, Mushroom } from '../services/api';
 import { mapService, LatLng } from '../services/mapService';  // Added mapService
 import { useAuth } from '../context/AuthContext';
@@ -46,7 +46,6 @@ function deg2rad(deg: number) {
   const router = useRouter();
   const { user, isAuthenticated } = useAuth();
   const params = useLocalSearchParams();
-  const skipLocation = params.skipLocation === 'true';
 
   const mapRef = useRef<MapView>(null);
   
@@ -68,6 +67,23 @@ function deg2rad(deg: number) {
     longitudeDelta: 20,
   });
 
+  // Track zoom level for performance optimization
+  const [currentZoom, setCurrentZoom] = useState(20); // Start zoomed out
+
+  // Memoize selected mushroom IDs for O(1) lookup instead of O(n) for each marker
+  const selectedMushroomIds = useMemo(() => {
+    return new Set(selectedMushrooms.map(m => m._id));
+  }, [selectedMushrooms]);
+
+  // Create a map of mushroom ID to sequence number for selected mushrooms
+  const selectedMushroomSequence = useMemo(() => {
+    const map = new Map<string, number>();
+    selectedMushrooms.forEach((m, index) => {
+      map.set(m._id, index + 1);
+    });
+    return map;
+  }, [selectedMushrooms]);
+
   useEffect(() => {
     // Check admin
     if (isAuthenticated && user?.role !== 'admin') {
@@ -85,21 +101,7 @@ function deg2rad(deg: number) {
     try {
       setLoadingMushrooms(true);
       
-      // Get user location only if NOT skipping
-      if (!skipLocation) {
-        let { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
-          let location = await Location.getCurrentPositionAsync({});
-          setRegion({
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-            latitudeDelta: 0.05,
-            longitudeDelta: 0.05,
-          });
-        }
-      } else {
-        // Just set a default view or relying on initial state
-      }
+      // Location request removed from this screen
 
       // Load mushrooms inside here...
 
@@ -111,6 +113,8 @@ function deg2rad(deg: number) {
         console.log('First mushroom location:', mushrooms[0].location);
       }
       setAllMushrooms(mushrooms);
+
+      // Keep map at India center view - user can zoom/pan as needed
 
     } catch (error) {
       console.error('Error loading data:', error);
@@ -146,7 +150,12 @@ function deg2rad(deg: number) {
       }
     };
 
-    fetchPath();
+    // Debounce route fetching by 500ms to prevent excessive API calls
+    const timeoutId = setTimeout(() => {
+      fetchPath();
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
     
   }, [selectedMushrooms]);
 
@@ -227,11 +236,14 @@ function deg2rad(deg: number) {
         provider={PROVIDER_GOOGLE}
         style={styles.map}
         initialRegion={region}
-        showsUserLocation={!skipLocation}
-        showsMyLocationButton={!skipLocation}
+        onRegionChangeComplete={(newRegion) => {
+          setCurrentZoom(newRegion.latitudeDelta);
+        }}
+        showsUserLocation={false}
+        showsMyLocationButton={false}
       >
-        {/* Draw Line between selected mushrooms */}
-        {selectedMushrooms.length > 1 && routeCoordinates.length > 0 && (
+        {/* Draw Line between selected mushrooms - only when zoomed in */}
+        {currentZoom <= 1 && selectedMushrooms.length > 1 && routeCoordinates.length > 0 && (
           <Polyline
             coordinates={routeCoordinates}
             strokeWidth={6}
@@ -241,29 +253,45 @@ function deg2rad(deg: number) {
           />
         )}
 
-        {/* Render markers */}
-        {allMushrooms.map((m) => {
-          const index = selectedMushrooms.findIndex(sel => sel._id === m._id);
-          const isSelected = index !== -1;
+        {/* Render markers - use simple markers when zoomed out for performance */}
+        {currentZoom > 1 ? (
+          // Zoomed out: simple native markers
+          allMushrooms.map((m) => {
+            const isSelected = selectedMushroomIds.has(m._id);
+            return (
+              <Marker
+                key={m._id}
+                coordinate={m.location}
+                onPress={() => toggleMushroomSelection(m)}
+                pinColor={isSelected ? "#387a63" : "#cbd5e1"}
+              />
+            );
+          })
+        ) : (
+          // Zoomed in: custom markers with selection UI
+          allMushrooms.map((m) => {
+            const isSelected = selectedMushroomIds.has(m._id);
+            const sequenceNumber = selectedMushroomSequence.get(m._id);
 
-          return (
-            <Marker
-              key={m._id}
-              coordinate={m.location}
-              onPress={() => toggleMushroomSelection(m)}
-              opacity={isSelected ? 1 : 0.6} // Fade unselected if any are selected? Or just style differently.
-              zIndex={isSelected ? 100 + index : 1}
-            >
-              <View style={[styles.markerContainer, isSelected && styles.markerSelected]}>
-                {isSelected ? (
-                  <Text style={styles.markerNumber}>{index + 1}</Text>
-                ) : (
-                  <View style={styles.markerDot} />
-                )}
-              </View>
-            </Marker>
-          );
-        })}
+            return (
+              <Marker
+                key={m._id}
+                coordinate={m.location}
+                onPress={() => toggleMushroomSelection(m)}
+                opacity={isSelected ? 1 : 0.6}
+                zIndex={isSelected ? 100 + (sequenceNumber || 0) : 1}
+              >
+                <View style={[styles.markerContainer, isSelected && styles.markerSelected]}>
+                  {isSelected && sequenceNumber ? (
+                    <Text style={styles.markerNumber}>{sequenceNumber}</Text>
+                  ) : (
+                    <View style={styles.markerDot} />
+                  )}
+                </View>
+              </Marker>
+            );
+          })
+        )}
       </MapView>
 
       {/* Header Overlay */}

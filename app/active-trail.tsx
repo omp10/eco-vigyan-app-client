@@ -179,7 +179,7 @@ function deg2rad(deg: number) {
   };
 
   // Calculate distance to next stop whenever user moves or index changes
-  // Debounce this in real app, here we rely on simple effect
+  // Debounce this to avoid excessive API calls
   useEffect(() => {
     const updateUserRoute = async () => {
         if (userLocation && trail && trail.mushrooms && trail.mushrooms[currentStopIndex]) {
@@ -188,6 +188,14 @@ function deg2rad(deg: number) {
                 longitude: userLocation.coords.longitude
             };
             const destination = trail.mushrooms[currentStopIndex].location;
+
+            // Only update if moved more than 20 meters from last fetch
+            const dist = getDistanceFromLatLonInKm(
+              origin.latitude, 
+              origin.longitude, 
+              destination.latitude, 
+              destination.longitude
+            );
 
             try {
                 const result = await mapService.fetchRoute(origin, destination);
@@ -201,8 +209,12 @@ function deg2rad(deg: number) {
         }
     };
     
-    // Only update if moved significantly or target changed
-    updateUserRoute();
+    // Debounce by 3 seconds to reduce API calls during movement
+    const timeoutId = setTimeout(() => {
+      updateUserRoute();
+    }, 3000);
+
+    return () => clearTimeout(timeoutId);
 
   }, [userLocation, currentStopIndex, trail]);
 

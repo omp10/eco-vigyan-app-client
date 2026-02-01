@@ -17,17 +17,37 @@ const ThemeContext = createContext<ThemeContextType>({
 export const useTheme = () => useContext(ThemeContext);
 
 export const CustomThemeProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
-  const theme = 'light';
-
-  const toggleTheme = () => {
-    // Theme switching disabled
-    console.log('Theme switching is disabled');
-  };
+  const [theme, setTheme] = useState<Theme>('light');
 
   useEffect(() => {
-    // Enforce light mode on mount
-    Appearance.setColorScheme('light');
+    // Load persisted theme or default to light
+    const loadTheme = async () => {
+      try {
+        const savedTheme = await AsyncStorage.getItem('@user_theme');
+        if (savedTheme === 'dark' || savedTheme === 'light') {
+          setTheme(savedTheme);
+          Appearance.setColorScheme(savedTheme);
+        } else {
+            // Default to light
+            Appearance.setColorScheme('light');
+        }
+      } catch (error) {
+        console.error('Failed to load theme:', error);
+      }
+    };
+    loadTheme();
   }, []);
+
+  const toggleTheme = async () => {
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
+    Appearance.setColorScheme(newTheme);
+    try {
+      await AsyncStorage.setItem('@user_theme', newTheme);
+    } catch (error) {
+      console.error('Failed to save theme:', error);
+    }
+  };
 
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>

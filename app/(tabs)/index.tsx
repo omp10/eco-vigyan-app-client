@@ -1,8 +1,8 @@
-import { mushroomService, Mushroom } from '../../services/api';
+import { mushroomService, Mushroom, getFungusImageUrl } from '../../services/api';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Dimensions, Image as RNImage } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Image } from 'expo-image';
@@ -15,13 +15,7 @@ const ASSETS = {
 };
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api';
-const BASE_URL = API_URL.endsWith('/api') ? API_URL.slice(0, -4) : API_URL;
-
-function getFungusImageUrl(url?: string) {
-  if (!url) return 'https://via.placeholder.com/150';
-  if (url.startsWith('http')) return url;
-  return `${BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
-}
+// const BASE_URL = API_URL.endsWith('/api') ? API_URL.slice(0, -4) : API_URL;
 
 // Simple time ago helper
 function timeAgo(dateParam: string | Date): string {
@@ -70,7 +64,9 @@ export default function HomeScreen() {
         .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
         .slice(0, 5);
       
+      console.log('Recent Sightings Data:', JSON.stringify(sorted.map(s => ({ id: s._id, name: s.commonName, imgCount: s.images?.length, firstImg: s.images?.[0]?.url, thumb: s.thumbnail })), null, 2));
       setRecentSightings(sorted);
+      
     } catch (error) {
       console.error("Failed to load sightings:", error);
     } finally {
@@ -194,20 +190,38 @@ export default function HomeScreen() {
             ) : recentSightings.length === 0 ? (
                <Text className="text-slate-400 italic">No recent sightings yet.</Text>
             ) : (
-                recentSightings.map((mushroom) => (
-                  <TouchableOpacity 
-                    key={mushroom._id} 
-                    onPress={() => router.push(`/mushroom/${mushroom._id}` as any)}
-                    className="flex-row items-center gap-4 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-700/50 shadow-sm active:opacity-70"
-                  >
-                    <View className="w-16 h-16 rounded-xl overflow-hidden shrink-0 bg-slate-100">
-                      <Image 
-                        source={{ uri: getFungusImageUrl(mushroom.thumbnail || mushroom.images?.[0]?.url) }} 
-                        className="w-full h-full"
-                        contentFit="cover"
-                        transition={200}
-                      />
-                    </View>
+                recentSightings.map((mushroom) => {
+                  // Get the image URL with fallback chain
+                  const imageUrl = mushroom.images?.[0]?.url || mushroom.thumbnail || '';
+                  const resolvedUrl = getFungusImageUrl(imageUrl) || 'https://via.placeholder.com/150';
+                  
+                  // Debug logging for each mushroom
+                  console.log(`[Sighting ${mushroom._id}] Raw image data:`, {
+                    hasImages: !!mushroom.images?.length,
+                    firstImageUrl: mushroom.images?.[0]?.url,
+                    thumbnail: mushroom.thumbnail,
+                    resolvedUrl,
+                  });
+
+                  return (
+                    <TouchableOpacity 
+                      key={mushroom._id} 
+                      onPress={() => router.push(`/mushroom/${mushroom._id}` as any)}
+                      className="flex-row items-center gap-4 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-700/50 shadow-sm active:opacity-70"
+                    >
+                      <View className="w-16 h-16 rounded-xl overflow-hidden shrink-0 bg-slate-100">
+                        <RNImage 
+                          source={{ uri: resolvedUrl }} 
+                          style={{ width: '100%', height: '100%' }}
+                          resizeMode="cover"
+                          onError={(e) => {
+                            console.error(`[Sighting ${mushroom._id}] Image Load Error:`, {
+                              error: e.nativeEvent.error,
+                              attemptedUrl: resolvedUrl,
+                            });
+                          }}
+                        />
+                      </View>
                     <View className="flex-1 justify-center">
                       <Text className="font-bold text-sm text-slate-900 dark:text-white" numberOfLines={1}>
                         {mushroom.commonName || "Unknown Species"}
@@ -236,7 +250,8 @@ export default function HomeScreen() {
                       <MaterialIcons name="chevron-right" size={20} color="#64748b" />
                     </View>
                   </TouchableOpacity>
-                ))
+                    );
+                })
             )}
           </View>
         </View>

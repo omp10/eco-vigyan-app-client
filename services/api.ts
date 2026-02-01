@@ -10,6 +10,15 @@ const api = axios.create({
   },
 });
 
+export function getFungusImageUrl(url?: string) {
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  
+  const BASE_URL = API_URL.endsWith('/api') ? API_URL.slice(0, -4) : API_URL;
+  const relativePath = url.startsWith('/') ? url : `/${url}`;
+  return `${BASE_URL}${relativePath}`;
+}
+
 export interface MushroomLocation {
   latitude: number;
   longitude: number;
