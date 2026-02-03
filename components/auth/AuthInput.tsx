@@ -37,11 +37,16 @@ export default function AuthInput({ label, icon, isPassword, ...props }: AuthInp
           {...props}
         />
         {isPassword && (
-          <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+          <TouchableOpacity 
+            onPress={() => setShowPassword(!showPassword)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            activeOpacity={0.6}
+            className="p-1"
+          >
             <MaterialIcons 
               name={showPassword ? 'visibility-off' : 'visibility'} 
-              size={20} 
-              color="#94a3b8" 
+              size={22} 
+              color={showPassword ? '#11d421' : '#94a3b8'} 
             />
           </TouchableOpacity>
         )}
