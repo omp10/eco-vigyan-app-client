@@ -8,13 +8,13 @@ import {
   TextInput, 
   Alert, 
   ActivityIndicator,
-  StyleSheet
+  StyleSheet,
+  Dimensions
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
 import { uploadToCloudinary } from '../lib/uploadToCloudinary';
 import LocationPickerModal from '../components/LocationPickerModal';
 import {
@@ -27,11 +27,10 @@ import {
 } from '../lib/mushroomConstants';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
-
-// Simplified local Picker component to avoid touching other files if possible, 
-// or re-use existing if they are safe. Let's assume MushroomSelectField is safe for now, 
-// but if it uses className it might trigger issues. 
-// Safest bet is to replace it with simple UI here for the test.
+import { AppTheme, shadows } from '@/constants/app-theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function SubmissionScreen() {
   const router = useRouter();
@@ -39,10 +38,7 @@ export default function SubmissionScreen() {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
-  const [hasExifGps, setHasExifGps] = useState(false);
   const [exifDateTime, setExifDateTime] = useState<Date | null>(null);
-  const [isExtractingExif, setIsExtractingExif] = useState(false);
-  const [isGettingLocation, setIsGettingLocation] = useState(false);
   
   const [commonName, setCommonName] = useState("");
   const [scientificName, setScientificName] = useState("");
@@ -55,29 +51,16 @@ export default function SubmissionScreen() {
   
   const [internalLocation, setInternalLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
-  const handleLocationSelect = (location: any) => {
-    setInternalLocation(location);
-  };
-
   const handleCamera = async () => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission denied', 'Camera permission is required');
-        return;
-      }
-
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['images'],
-        quality: 0.8,
-      });
-
+      if (status !== 'granted') return Alert.alert('Permission denied', 'Camera permission is required');
+      const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 });
       if (!result.canceled && result.assets[0]) {
         setImageUri(result.assets[0].uri);
         setExifDateTime(new Date());
       }
     } catch (error) {
-      console.error('Camera error:', error);
       Alert.alert('Error', 'Failed to open camera');
     }
   };
@@ -85,48 +68,26 @@ export default function SubmissionScreen() {
   const handleGallery = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission denied', 'Gallery permission is required');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        quality: 0.8,
-      });
-
+      if (status !== 'granted') return Alert.alert('Permission denied', 'Gallery permission is required');
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
       if (!result.canceled && result.assets[0]) {
         setImageUri(result.assets[0].uri);
         setExifDateTime(new Date());
       }
     } catch (error) {
-      console.error('Gallery error:', error);
       Alert.alert('Error', 'Failed to open gallery');
     }
   };
 
   const handleSubmit = async () => {
-    if (!isAuthenticated) {
-      Alert.alert('Authentication Required', 'Please login to submit an observation.');
-      return;
-    }
-
-    if (!imageUri) {
-      Alert.alert('Error', 'Please take or upload a photo');
-      return;
-    }
-
-    if (!internalLocation) {
-      Alert.alert('Error', 'Please select a location');
-      return;
-    }
+    if (!isAuthenticated) return Alert.alert('Authentication Required', 'Please login to submit.');
+    if (!imageUri) return Alert.alert('Error', 'Please take or upload a photo');
+    if (!internalLocation) return Alert.alert('Error', 'Please select a location');
 
     setIsSubmitting(true);
-
     try {
       const upload = await uploadToCloudinary(imageUri);
       const token = await AsyncStorage.getItem('@ecovigyan_auth_token');
-      
       const payload = {
         latitude: internalLocation.latitude,
         longitude: internalLocation.longitude,
@@ -142,112 +103,115 @@ export default function SubmissionScreen() {
         stemPresence,
         commonUses,
       };
-
-      const response = await api.post('/mushrooms', payload, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      
-      if (response.data) {
-        Alert.alert('Success', 'Mushroom submitted successfully!', [
-          { 
-            text: 'OK', 
-            onPress: () => {
-              router.back();
-            } 
-          }
-        ]);
-      }
+      await api.post('/mushrooms', payload, { headers: { Authorization: `Bearer ${token}` } });
+      Alert.alert('Success', 'Specimen submitted!', [{ text: 'Great', onPress: () => router.back() }]);
     } catch (error: any) {
-      console.error('Submission error:', error);
       Alert.alert('Error', error.message || 'Failed to submit mushroom');
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const Section = ({ title, children, icon }: any) => (
+    <View style={styles.section}>
+      <View style={styles.sectionHead}>
+        <Ionicons name={icon} size={18} color={AppTheme.colors.primary} />
+        <Text style={styles.sectionTitle}>{title}</Text>
+      </View>
+      {children}
+    </View>
+  );
+
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerSup}>Citizen Science</Text>
-          <Text style={styles.headerTitle}>Add Specimen</Text>
-        </View>
-        <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
-          <MaterialIcons name="close" size={24} color="#64748b" />
-        </TouchableOpacity>
-      </View>
+      <StatusBar style="dark" />
+      <SafeAreaView edges={['top']} style={styles.header}>
+         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <Ionicons name="close" size={24} color={AppTheme.colors.text} />
+         </TouchableOpacity>
+         <Text style={styles.headerTitle}>New Sighting</Text>
+         <View style={{ width: 44 }} />
+      </SafeAreaView>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.section}>
-          <Text style={styles.label}>Photo *</Text>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Photo Upload Area */}
+        <TouchableOpacity 
+          style={[styles.uploadArea, imageUri && styles.uploadAreaActive]} 
+          onPress={imageUri ? undefined : handleCamera}
+          activeOpacity={0.7}
+        >
           {imageUri ? (
-            <View style={styles.imagePreview}>
-              <Image source={{ uri: imageUri }} style={styles.image} resizeMode="cover" />
-              <TouchableOpacity onPress={() => setImageUri(null)} style={styles.removeImageBtn}>
-                <MaterialIcons name="close" size={16} color="white" />
+            <View style={styles.imageContainer}>
+              <Image source={{ uri: imageUri }} style={styles.previewImg} />
+              <TouchableOpacity style={styles.removeBtn} onPress={() => setImageUri(null)}>
+                <Ionicons name="trash" size={18} color="#fff" />
               </TouchableOpacity>
             </View>
           ) : (
-            <View style={styles.photoActions}>
-              <TouchableOpacity onPress={handleCamera} style={styles.photoBtn}>
-                 <MaterialIcons name="camera-alt" size={24} color="#11d421" />
-                 <Text style={styles.photoBtnText}>Camera</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleGallery} style={styles.photoBtn}>
-                 <MaterialIcons name="photo-library" size={24} color="#64748b" />
-                 <Text style={[styles.photoBtnText, {color: '#64748b'}]}>Gallery</Text>
-              </TouchableOpacity>
+            <View style={styles.placeholder}>
+               <View style={styles.placeholderCircle}>
+                  <Ionicons name="camera" size={32} color={AppTheme.colors.primary} />
+               </View>
+               <Text style={styles.placeholderTitle}>Tap to take a photo</Text>
+               <Text style={styles.placeholderSub}>Capture the specimen for identification</Text>
+               <View style={styles.uploadOptions}>
+                  <TouchableOpacity onPress={handleGallery} style={styles.galleryLink}>
+                     <Ionicons name="image-outline" size={16} color={AppTheme.colors.textMuted} />
+                     <Text style={styles.galleryText}>Choose from gallery</Text>
+                  </TouchableOpacity>
+               </View>
             </View>
           )}
-        </View>
+        </TouchableOpacity>
 
-        <View style={styles.section}>
-          <Text style={styles.label}>Common Name</Text>
-          <TextInput 
-            value={commonName}
-            onChangeText={setCommonName}
-            placeholder="e.g. Fly Agaric"
-            style={styles.input}
-          />
-        </View>
+        <Section title="Specimen Details" icon="leaf-outline">
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Common Name</Text>
+            <TextInput 
+              value={commonName}
+              onChangeText={setCommonName}
+              placeholder="e.g. Fly Agaric"
+              style={styles.input}
+              placeholderTextColor={AppTheme.colors.textMuted}
+            />
+          </View>
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Scientific Name (Optional)</Text>
+            <TextInput 
+              value={scientificName}
+              onChangeText={setScientificName}
+              placeholder="e.g. Amanita muscaria"
+              style={[styles.input, { fontStyle: 'italic' }]}
+              placeholderTextColor={AppTheme.colors.textMuted}
+            />
+          </View>
+        </Section>
 
-        <View style={styles.section}>
-          <Text style={styles.label}>Scientific Name</Text>
-          <TextInput 
-            value={scientificName}
-            onChangeText={setScientificName}
-            placeholder="e.g. Amanita muscaria"
-            style={[styles.input, { fontStyle: 'italic' }]}
-          />
-        </View>
+        <Section title="Discovery Location" icon="location-outline">
+           {internalLocation ? (
+              <View style={styles.locCard}>
+                 <View style={styles.locInfo}>
+                    <Ionicons name="navigate-circle" size={24} color={AppTheme.colors.primary} />
+                    <View>
+                       <Text style={styles.locVal}>Coords: {internalLocation.latitude.toFixed(5)}, {internalLocation.longitude.toFixed(5)}</Text>
+                       <Text style={styles.locLab}>Automatically pinned from discovery</Text>
+                    </View>
+                 </View>
+                 <TouchableOpacity style={styles.locEdit} onPress={() => setShowLocationPicker(true)}>
+                    <Text style={styles.locEditText}>Change</Text>
+                 </TouchableOpacity>
+              </View>
+           ) : (
+              <TouchableOpacity style={styles.locBtn} onPress={() => setShowLocationPicker(true)}>
+                 <Ionicons name="add-circle-outline" size={20} color={AppTheme.colors.textMuted} />
+                 <Text style={styles.locBtnText}>Pin your finding on map</Text>
+              </TouchableOpacity>
+           )}
+        </Section>
 
-        <View style={styles.section}>
-          <Text style={styles.label}>Location *</Text>
-          {internalLocation ? (
-             <View style={styles.locationCard}>
-               <Text style={{color: '#11d421', fontWeight: 'bold'}}>
-                 {internalLocation.latitude.toFixed(5)}, {internalLocation.longitude.toFixed(5)}
-               </Text>
-               <TouchableOpacity onPress={() => setShowLocationPicker(true)}>
-                 <Text style={{fontWeight: 'bold', textDecorationLine: 'underline'}}>Change</Text>
-               </TouchableOpacity>
-             </View>
-          ) : (
-            <TouchableOpacity onPress={() => setShowLocationPicker(true)} style={styles.locationBtn}>
-              <MaterialIcons name="add-location" size={20} color="#64748b" />
-              <Text style={{color: '#64748b', fontWeight: 'bold'}}>Select Location</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <View style={styles.divider} />
-        <Text style={styles.sectionHeader}>Classification Details (Optional)</Text>
-
-        <View style={styles.section}>
-          <Text style={styles.label}>Ecological Role</Text>
-          <View style={styles.chipContainer}>
+        <Section title="Ecology & Characteristics" icon="color-filter-outline">
+          <Text style={styles.chipLabel}>Ecological Role</Text>
+          <View style={styles.chips}>
             {ECOLOGICAL_ROLES.map(role => (
               <TouchableOpacity
                 key={role}
@@ -258,106 +222,51 @@ export default function SubmissionScreen() {
               </TouchableOpacity>
             ))}
           </View>
-        </View>
-        <View style={styles.section}>
-           <Text style={styles.label}>Texture</Text>
-           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{paddingRight: 16}}>
-             {TEXTURES.map(t => (
-               <TouchableOpacity 
-                 key={t} 
-                 onPress={() => setTexture(t)}
-                 style={[styles.chip, texture === t && styles.chipActive]}
-               >
-                 <Text style={[styles.chipText, texture === t && styles.chipTextActive]}>{t}</Text>
-               </TouchableOpacity>
-             ))}
-           </ScrollView>
-        </View>
 
-        <View style={styles.section}>
-           <Text style={styles.label}>Underside</Text>
-           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{paddingRight: 16}}>
-             {UNDERSIDES.map(u => (
-               <TouchableOpacity 
-                 key={u} 
-                 onPress={() => setUnderside(u)}
-                 style={[styles.chip, underside === u && styles.chipActive]}
-               >
-                 <Text style={[styles.chipText, underside === u && styles.chipTextActive]}>{u}</Text>
-               </TouchableOpacity>
-             ))}
-           </ScrollView>
-        </View>
-
-        <View style={styles.section}>
-           <Text style={styles.label}>Fruiting Surface</Text>
-           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{paddingRight: 16}}>
-             {FRUITING_SURFACES.map(fs => (
-               <TouchableOpacity 
-                 key={fs} 
-                 onPress={() => setFruitingSurface(fs)}
-                 style={[styles.chip, fruitingSurface === fs && styles.chipActive]}
-               >
-                 <Text style={[styles.chipText, fruitingSurface === fs && styles.chipTextActive]}>{fs}</Text>
-               </TouchableOpacity>
-             ))}
-           </ScrollView>
-        </View>
-
-        <View style={styles.section}>
-           <Text style={styles.label}>Stem Presence</Text>
-           <View style={styles.chipContainer}>
-             {STEM_PRESENCE.map(s => (
-               <TouchableOpacity 
-                 key={s} 
-                 onPress={() => setStemPresence(s)}
-                 style={[styles.chip, stemPresence === s && styles.chipActive]}
-               >
-                 <Text style={[styles.chipText, stemPresence === s && styles.chipTextActive]}>{s}</Text>
-               </TouchableOpacity>
-             ))}
-           </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.label}>Common Uses</Text>
-          <View style={styles.chipContainer}>
-            {COMMON_USES.map(use => (
-              <TouchableOpacity
-                key={use}
-                onPress={() => setCommonUses(prev => prev.includes(use) ? prev.filter(u => u !== use) : [...prev, use])}
-                style={[styles.chip, commonUses.includes(use) && styles.chipActive]}
+          <Text style={[styles.chipLabel, { marginTop: 16 }]}>Texture</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.hScroll}>
+            {TEXTURES.map(t => (
+              <TouchableOpacity 
+                key={t} 
+                onPress={() => setTexture(t)}
+                style={[styles.chip, texture === t && styles.chipActive]}
               >
-                <Text style={[styles.chipText, commonUses.includes(use) && styles.chipTextActive]}>{use}</Text>
+                <Text style={[styles.chipText, texture === t && styles.chipTextActive]}>{t}</Text>
               </TouchableOpacity>
             ))}
-          </View>
-        </View>
+          </ScrollView>
+        </Section>
 
+        <View style={{ height: 120 }} />
       </ScrollView>
 
       <View style={styles.footer}>
-        <TouchableOpacity 
-          onPress={handleSubmit} 
-          disabled={isSubmitting || !isAuthenticated}
-          style={[
-            styles.submitBtn, 
-            (isSubmitting || !isAuthenticated) && {backgroundColor: '#ccc', shadowOpacity: 0}
-          ]}
-        >
-          {isSubmitting ? <ActivityIndicator color="#fff" /> : (
-            <Text style={styles.submitBtnText}>
-              {isAuthenticated ? 'Submit Observation' : 'Login to Submit'}
-            </Text>
-          )}
-        </TouchableOpacity>
+         <TouchableOpacity 
+            style={[styles.sumbitBtn, (isSubmitting || !imageUri) && styles.submitBtnDisabled]} 
+            onPress={handleSubmit}
+            disabled={isSubmitting || !imageUri}
+         >
+            <LinearGradient
+               colors={isSubmitting || !imageUri ? ['#ccc', '#bbb'] : [AppTheme.colors.primary, AppTheme.colors.primaryDeep]}
+               style={styles.sumbitGradient}
+            >
+               {isSubmitting ? (
+                 <ActivityIndicator color="#fff" />
+               ) : (
+                 <>
+                   <Text style={styles.submitText}>Submit Identification</Text>
+                   <Ionicons name="chevron-forward" size={20} color="#fff" />
+                 </>
+               )}
+            </LinearGradient>
+         </TouchableOpacity>
       </View>
 
       <LocationPickerModal
         isOpen={showLocationPicker}
         onClose={() => setShowLocationPicker(false)}
         onSelect={(loc) => {
-          handleLocationSelect(loc);
+          setInternalLocation(loc);
           setShowLocationPicker(false);
         }}
         selectedLocation={internalLocation}
@@ -367,50 +276,259 @@ export default function SubmissionScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
   header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    padding: 16, paddingTop: 60, borderBottomWidth: 1, borderBottomColor: '#f1f5f9'
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: AppTheme.colors.border,
+    paddingBottom: 12,
   },
-  headerSup: { fontSize: 10, fontWeight: '900', color: '#11d421', textTransform: 'uppercase' },
-  headerTitle: { fontSize: 24, fontWeight: '900', color: '#1e293b', textTransform: 'uppercase' },
-  closeBtn: { padding: 8, backgroundColor: '#f1f5f9', borderRadius: 20 },
-  scrollContent: { padding: 16, paddingBottom: 100 },
-  section: { marginBottom: 24 },
-  label: { fontSize: 12, fontWeight: '700', color: '#334155', marginBottom: 8, textTransform: 'uppercase' },
-  imagePreview: { height: 250, borderRadius: 16, overflow: 'hidden', borderWidth: 2, borderColor: '#11d421' },
-  image: { width: '100%', height: '100%' },
-  removeImageBtn: { position: 'absolute', top: 10, right: 10, backgroundColor: '#ef4444', padding: 8, borderRadius: 20 },
-  photoActions: { flexDirection: 'row', gap: 12 },
-  photoBtn: { 
-    flex: 1, height: 120, borderRadius: 16, borderWidth: 2, borderColor: '#e2e8f0', borderStyle: 'dashed',
-    justifyContent: 'center', alignItems: 'center', gap: 8, backgroundColor: '#f8fafc'
+  backBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: AppTheme.colors.surfaceMuted,
   },
-  photoBtnText: { fontSize: 12, fontWeight: '700', color: '#11d421', textTransform: 'uppercase' },
-  input: { 
-    backgroundColor: '#f1f5f9', borderRadius: 12, padding: 16, fontSize: 16, color: '#0f172a' 
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: AppTheme.colors.text,
   },
-  locationCard: {
-    padding: 16, backgroundColor: '#dcfce7', borderRadius: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'
+  scrollContent: {
+    padding: 20,
   },
-  locationBtn: {
-    width: '100%', backgroundColor: '#f1f5f9', padding: 16, borderRadius: 12, borderWidth: 2, borderColor: '#e2e8f0',
-    flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8
+  uploadArea: {
+    width: '100%',
+    height: 280,
+    backgroundColor: AppTheme.colors.surfaceMuted,
+    borderRadius: 30,
+    borderWidth: 2,
+    borderColor: AppTheme.colors.border,
+    borderStyle: 'dashed',
+    overflow: 'hidden',
+    marginBottom: 32,
   },
-  divider: { height: 1, backgroundColor: '#e2e8f0', marginVertical: 24 },
-  sectionHeader: { fontSize: 10, fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 24 },
-  chipContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  uploadAreaActive: {
+    borderStyle: 'solid',
+    borderColor: AppTheme.colors.primary,
+  },
+  imageContainer: {
+    flex: 1,
+  },
+  previewImg: {
+    width: '100%',
+    height: '100%',
+  },
+  removeBtn: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  placeholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  placeholderCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: AppTheme.colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  placeholderTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: AppTheme.colors.text,
+  },
+  placeholderSub: {
+    fontSize: 13,
+    color: AppTheme.colors.textMuted,
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  uploadOptions: {
+    marginTop: 20,
+  },
+  galleryLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  galleryText: {
+    fontSize: 14,
+    color: AppTheme.colors.textMuted,
+    fontWeight: '700',
+  },
+  section: {
+    marginBottom: 32,
+  },
+  sectionHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: AppTheme.colors.text,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: AppTheme.colors.textMuted,
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: AppTheme.colors.surfaceMuted,
+    borderRadius: 16,
+    padding: 16,
+    fontSize: 15,
+    fontWeight: '600',
+    color: AppTheme.colors.text,
+    borderWidth: 1,
+    borderColor: AppTheme.colors.border,
+  },
+  locCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: AppTheme.colors.primarySoft,
+    padding: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: AppTheme.colors.primary,
+  },
+  locInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  locVal: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: AppTheme.colors.primaryDeep,
+  },
+  locLab: {
+    fontSize: 11,
+    color: AppTheme.colors.primary,
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  locEdit: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+  },
+  locEditText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: AppTheme.colors.primary,
+  },
+  locBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: AppTheme.colors.surfaceMuted,
+    padding: 18,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: AppTheme.colors.border,
+    gap: 10,
+  },
+  locBtnText: {
+    color: AppTheme.colors.textMuted,
+    fontWeight: '700',
+  },
+  chipLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: AppTheme.colors.text,
+    marginBottom: 12,
+  },
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
   chip: {
-    paddingHorizontal: 16, paddingVertical: 10, borderRadius: 24, borderWidth: 1, borderColor: '#e2e8f0', marginRight: 8, backgroundColor: '#fff', marginBottom: 8
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: AppTheme.colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: AppTheme.colors.border,
   },
-  chipActive: { backgroundColor: '#11d421', borderColor: '#11d421' },
-  chipText: { fontSize: 12, fontWeight: '700', color: '#64748b' },
-  chipTextActive: { color: '#fff' },
-  footer: { 
-    padding: 16, borderTopWidth: 1, borderTopColor: '#f1f5f9', backgroundColor: '#fff' 
+  chipActive: {
+    backgroundColor: AppTheme.colors.primarySoft,
+    borderColor: AppTheme.colors.primary,
   },
-  submitBtn: {
-    width: '100%', backgroundColor: '#11d421', padding: 16, borderRadius: 16, alignItems: 'center', shadowColor: '#11d421', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4
+  chipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: AppTheme.colors.textMuted,
   },
-  submitBtnText: { color: '#fff', fontWeight: '900', fontSize: 14, textTransform: 'uppercase', letterSpacing: 1 }
+  chipTextActive: {
+    color: AppTheme.colors.primary,
+  },
+  hScroll: {
+    flexDirection: 'row',
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 20,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderTopWidth: 1,
+    borderTopColor: AppTheme.colors.border,
+  },
+  sumbitBtn: {
+    width: '100%',
+    ...shadows.card,
+  },
+  sumbitGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+    borderRadius: 20,
+    gap: 12,
+  },
+  submitText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  submitBtnDisabled: {
+    opacity: 0.6,
+  }
 });

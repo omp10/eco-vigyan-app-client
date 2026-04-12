@@ -1,6 +1,24 @@
 import axios from 'axios';
+import { Platform } from 'react-native';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api';
+function resolveApiUrl() {
+  const rawUrl = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api').trim();
+  const isLocalhost = /https?:\/\/(localhost|127\.0\.0\.1)/i.test(rawUrl);
+
+  if (!isLocalhost) {
+    return rawUrl;
+  }
+
+  let normalizedUrl = rawUrl.replace(/^https:/i, 'http:');
+
+  if (Platform.OS === 'android') {
+    normalizedUrl = normalizedUrl.replace(/localhost|127\.0\.0\.1/i, '10.0.2.2');
+  }
+
+  return normalizedUrl;
+}
+
+const API_URL = resolveApiUrl();
 
 const api = axios.create({
   baseURL: API_URL,

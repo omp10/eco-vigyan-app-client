@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, TextInputProps } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { AppTheme } from '@/constants/app-theme';
 
 interface AuthInputProps extends TextInputProps {
   label?: string;
@@ -11,29 +12,37 @@ interface AuthInputProps extends TextInputProps {
 export default function AuthInput({ label, icon, isPassword, ...props }: AuthInputProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+  const colors = AppTheme.colors;
 
   return (
     <View className="mb-4">
-      {label && <Text className="text-slate-600 dark:text-slate-300 text-sm font-medium mb-1.5 ml-1">{label}</Text>}
+      {label && <Text className="text-sm font-semibold mb-2 ml-1" style={{ color: colors.textMuted }}>{label}</Text>}
       <View 
-        className={`flex-row items-center bg-slate-50 dark:bg-slate-800 border rounded-xl px-4 h-12 ${
-          isFocused ? 'border-primary' : 'border-slate-200 dark:border-slate-700'
-        }`}
+        className="flex-row items-center rounded-2xl px-4 h-14"
+        style={{
+          backgroundColor: isFocused ? '#FFFFFF' : colors.surfaceMuted,
+          borderWidth: 1,
+          borderColor: isFocused ? colors.primary : colors.border,
+        }}
       >
         {icon && (
           <MaterialIcons 
             name={icon} 
             size={20} 
-            color={isFocused ? '#11d421' : '#94a3b8'} 
+            color={isFocused ? colors.primary : '#8AA095'} 
             style={{ marginRight: 8 }}
           />
         )}
         <TextInput
-          className="flex-1 text-slate-800 dark:text-white text-base h-full"
-          placeholderTextColor="#9ca3af"
+          key={isPassword ? (showPassword ? 'visible' : 'hidden') : 'standard'}
+          className="flex-1 text-base h-full"
+          style={{ color: colors.text }}
+          placeholderTextColor="#93A59A"
           secureTextEntry={isPassword && !showPassword}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
+          autoCorrect={!isPassword}
+          autoCapitalize={isPassword ? "none" : undefined}
           {...props}
         />
         {isPassword && (
@@ -46,7 +55,7 @@ export default function AuthInput({ label, icon, isPassword, ...props }: AuthInp
             <MaterialIcons 
               name={showPassword ? 'visibility-off' : 'visibility'} 
               size={22} 
-              color={showPassword ? '#11d421' : '#94a3b8'} 
+              color={showPassword ? colors.primary : '#8AA095'} 
             />
           </TouchableOpacity>
         )}

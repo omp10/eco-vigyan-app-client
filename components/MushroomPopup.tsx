@@ -1,7 +1,9 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity, Modal, Pressable, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
+import { MaterialIcons } from '@expo/vector-icons';
 import { Mushroom } from '@/services/api';
+import { AppTheme, shadows } from '@/constants/app-theme';
 
 interface MushroomPopupProps {
   mushroom: Mushroom | null;
@@ -21,72 +23,47 @@ export default function MushroomPopup({ mushroom, visible, onClose }: MushroomPo
 
   const imageUrl = mushroom.images?.[0]?.url || mushroom.thumbnail;
   const userName = mushroom.submittedBy?.name || mushroom.submittedBy?.username || 'Unknown';
-  const userDp = mushroom.submittedBy?.dp?.url;
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={onClose}>
         <Pressable style={styles.card} onPress={handleCardPress}>
-          {/* Close button */}
           <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-            <Text style={styles.closeText}>✕</Text>
+            <MaterialIcons name="close" size={18} color={AppTheme.colors.textMuted} />
           </TouchableOpacity>
 
+          <Image
+            source={{ uri: imageUrl || 'https://via.placeholder.com/300' }}
+            style={styles.image}
+            resizeMode="cover"
+          />
+
           <View style={styles.content}>
-            {/* Image on left */}
-            <View style={styles.imageContainer}>
-              {imageUrl ? (
-                <Image source={{ uri: imageUrl }} style={styles.mushroomImage} />
-              ) : (
-                <View style={styles.placeholderImage}>
-                  <Text style={styles.placeholderText}>🍄</Text>
-                </View>
-              )}
-            </View>
-
-            {/* Details on right */}
-            <View style={styles.details}>
-              {/* Mushroom name */}
-              <Text style={styles.commonName} numberOfLines={2}>
-                {mushroom.commonName || 'Unknown Mushroom'}
+            <Text style={styles.badge}>Wild fungi</Text>
+            <Text style={styles.commonName} numberOfLines={2}>
+              {mushroom.commonName || 'Unknown mushroom'}
+            </Text>
+            {mushroom.scientificName ? (
+              <Text style={styles.scientificName} numberOfLines={1}>
+                {mushroom.scientificName}
               </Text>
-              
-              {mushroom.scientificName && (
-                <Text style={styles.scientificName} numberOfLines={1}>
-                  {mushroom.scientificName}
-                </Text>
-              )}
+            ) : null}
 
-              {/* Ecological Role */}
-              {mushroom.ecologicalRole && mushroom.ecologicalRole.length > 0 && (
-                <View style={styles.ecologicalContainer}>
-                  {mushroom.ecologicalRole.map((role, index) => (
-                    <View key={index} style={styles.ecologicalTag}>
-                      <Text style={styles.ecologicalText}>{role}</Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-
-              {/* Contributor info */}
-              <View style={styles.contributor}>
-                {userDp ? (
-                  <Image source={{ uri: userDp }} style={styles.userDp} />
-                ) : (
-                  <View style={styles.userDpPlaceholder}>
-                    <Text style={styles.userDpText}>
-                      {userName.charAt(0).toUpperCase()}
-                    </Text>
+            {mushroom.ecologicalRole && mushroom.ecologicalRole.length > 0 ? (
+              <View style={styles.tags}>
+                {mushroom.ecologicalRole.slice(0, 3).map(role => (
+                  <View key={role} style={styles.tag}>
+                    <Text style={styles.tagText}>{role}</Text>
                   </View>
-                )}
-                <Text style={styles.userName} numberOfLines={1}>
-                  {userName}
-                </Text>
+                ))}
+              </View>
+            ) : null}
+
+            <View style={styles.footer}>
+              <Text style={styles.userName}>Added by {userName}</Text>
+              <View style={styles.openBtn}>
+                <Text style={styles.openBtnText}>Open</Text>
+                <MaterialIcons name="arrow-forward" size={16} color="#FFFFFF" />
               </View>
             </View>
           </View>
@@ -99,123 +76,97 @@ export default function MushroomPopup({ mushroom, visible, onClose }: MushroomPo
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(12,23,16,0.45)',
     justifyContent: 'flex-end',
-    paddingBottom: 100,
+    paddingBottom: 105,
     paddingHorizontal: 16,
   },
   card: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    overflow: 'hidden',
+    ...shadows.soft,
   },
   closeButton: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#f1f5f9',
+    top: 14,
+    right: 14,
+    zIndex: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.9)',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 10,
   },
-  closeText: {
-    fontSize: 14,
-    color: '#64748b',
-    fontWeight: 'bold',
+  image: {
+    width: '100%',
+    height: 180,
+    backgroundColor: '#E7EEE7',
   },
   content: {
-    flexDirection: 'row',
+    padding: 18,
   },
-  imageContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: '#f1f5f9',
-  },
-  mushroomImage: {
-    width: '100%',
-    height: '100%',
-  },
-  placeholderImage: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#e2e8f0',
-  },
-  placeholderText: {
-    fontSize: 40,
-  },
-  details: {
-    flex: 1,
-    marginLeft: 12,
-    justifyContent: 'center',
+  badge: {
+    color: AppTheme.colors.primary,
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1.4,
   },
   commonName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1e293b',
-    marginBottom: 2,
+    color: AppTheme.colors.text,
+    fontSize: 24,
+    fontWeight: '800',
+    marginTop: 8,
   },
   scientificName: {
-    fontSize: 14,
-    color: '#64748b',
+    color: AppTheme.colors.textMuted,
     fontStyle: 'italic',
-    marginBottom: 8,
+    marginTop: 4,
+    fontSize: 14,
   },
-  ecologicalContainer: {
+  tags: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 8,
+    gap: 8,
+    marginTop: 14,
   },
-  ecologicalTag: {
-    backgroundColor: '#dcfce7',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-    marginRight: 6,
-    marginBottom: 4,
+  tag: {
+    backgroundColor: AppTheme.colors.primarySoft,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
   },
-  ecologicalText: {
-    fontSize: 11,
-    color: '#16a34a',
-    fontWeight: '500',
-  },
-  contributor: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  userDp: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    marginRight: 8,
-  },
-  userDpPlaceholder: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#16a34a',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
-  },
-  userDpText: {
-    color: 'white',
+  tagText: {
+    color: AppTheme.colors.primary,
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    textTransform: 'capitalize',
+  },
+  footer: {
+    marginTop: 18,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
   },
   userName: {
+    color: AppTheme.colors.textMuted,
     fontSize: 13,
-    color: '#475569',
+    flex: 1,
+  },
+  openBtn: {
+    backgroundColor: AppTheme.colors.primary,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  openBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
   },
 });

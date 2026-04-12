@@ -1,29 +1,25 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Image, Modal, Alert } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator, StyleSheet, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { MaterialIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { Image } from 'expo-image';
 import { trailService } from '../../services/api';
-import { ActivityIndicator } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
-
-import { useFocusEffect } from 'expo-router';
-import { useCallback } from 'react';
+import { useTheme } from '@/context/ThemeContext';
+import { getAppTheme, shadows } from '@/constants/app-theme';
 
 export default function TrailScreen() {
   const router = useRouter();
-  const { user } = useAuth(); // Get user to check permissions if needed
+  const { user } = useAuth();
+  const { theme } = useTheme();
+  const colors = getAppTheme(theme).colors;
+  
   const [trails, setTrails] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
   
-  // Modal States
-  /* Removed createModalVisible */
-  /* Removed Load Modal State */
-  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
-  const [selectedTrail, setSelectedTrail] = useState<any>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-
   useFocusEffect(
     useCallback(() => {
       loadTrails();
@@ -31,7 +27,6 @@ export default function TrailScreen() {
   );
 
   const loadTrails = async () => {
-   /* ... existing loadTrails ... */ 
     try {
       setLoading(true);
       const data = await trailService.getAllTrails();
@@ -43,181 +38,156 @@ export default function TrailScreen() {
     }
   };
 
-  const handleCreatePress = () => {
-    router.push('/create-trail');
-  };
+  const filteredTrails = trails.filter(t => 
+    t.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-  const handleTrailPress = (trail: any) => {
-    // Navigate directly to active trail PREVIEW (skipLocation=true effectively means "don't track yet")
-    // Actually, let's just pass nothing for skipLocation, default behavior in active-trail will handle it.
-    // Or pass 'true' to ensure it starts in preview mode without permission prompt.
-    router.push({
-      pathname: '/active-trail',
-      params: { 
-        trailId: trail._id,
-        skipLocation: 'true' 
-      }
-    });
-  };
-
-  const handleDeletePress = (trail: any) => {
-    setSelectedTrail(trail);
-    setDeleteModalVisible(true);
-  };
-
-  /* ... confirmDeleteTrail ... */
-  const confirmDeleteTrail = async () => {
-    if (!selectedTrail) return;
-    
-    try {
-      setIsDeleting(true);
-       const token = await import('@react-native-async-storage/async-storage').then(m => m.default.getItem('@ecovigyan_auth_token'));
-       
-       if (token) {
-         await trailService.deleteTrail(selectedTrail._id, token);
-         await loadTrails(); 
-         setDeleteModalVisible(false);
-         setSelectedTrail(null);
-       } else {
-         Alert.alert("Error", "Authentication required to delete trails.");
-       }
-
-    } catch (error) {
-      console.error('Error deleting trail:', error);
-      Alert.alert('Error', 'Failed to delete trail');
-    } finally {
-      setIsDeleting(false);
-    }
+  const getDifficultyColor = (diff: string) => {
+    const d = diff?.toLowerCase();
+    if (d === 'easy') return colors.difficultyEasy;
+    if (d === 'moderate') return colors.difficultyModerate;
+    if (d === 'hard') return colors.difficultyHard;
+    return colors.primary;
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      <StatusBar style="dark" />
-      <View className="px-6 py-4 flex-row justify-between items-center border-b border-slate-100">
-        <Text className="text-2xl font-bold text-slate-800">My Trails</Text>
-        {user?.role === 'admin' && (
-        <TouchableOpacity 
-          className="bg-[#11d421] px-4 py-2 rounded-full flex-row items-center gap-1"
-          onPress={handleCreatePress}
-        >
-          <MaterialIcons name="add" size={18} color="white" />
-          <Text className="text-white font-bold text-sm">New</Text>
-        </TouchableOpacity>
-        )}
-      </View>
-
-      <ScrollView className="flex-1 px-6 pt-4" showsVerticalScrollIndicator={false}>
-        {loading ? (
-          <View className="flex-1 justify-center items-center py-20">
-            <ActivityIndicator size="large" color="#4C7C32" />
-          </View>
-        ) : trails.length === 0 ? (
-           <View className="flex-1 justify-center items-center py-20 gap-4">
-              <MaterialIcons name="landscape" size={64} color="#cbd5e1" />
-              <Text className="text-slate-400 text-center">No trails found. Create your first trail!</Text>
-           </View>
-        ) : (
-          <View className="gap-4 pb-24">
-          {trails.map((trail) => (
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+      <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
+      
+      <SafeAreaView edges={['top']} style={[styles.headerSafe, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        <View style={styles.header}>
+           <Text style={[styles.headerTitle, { color: colors.text }]}>Discover Trails</Text>
+           {user?.role === 'admin' && (
              <TouchableOpacity 
-                key={trail._id}
-                className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden"
-                onPress={() => handleTrailPress(trail)}
+                style={[styles.addBtn, { backgroundColor: colors.primary }]} 
+                onPress={() => router.push('/create-trail')}
              >
-                <Image 
-                    source={{ uri: trail.mushrooms?.[0]?.images?.[0]?.url || trail.mushrooms?.[0]?.thumbnail || trail.image || "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?q=80&w=2560&auto=format&fit=crop" }} 
-                    className="w-full h-40"
-                    resizeMode="cover"
-                />
-                <View className="absolute top-3 right-3 bg-white/90 px-3 py-1 rounded-full z-10">
-                    <Text className="text-slate-800 text-xs font-bold">{trail.difficulty || "Moderate"}</Text>
-                </View>
-
-                {user?.role === 'admin' && (
-                  <TouchableOpacity 
-                    className="absolute top-3 left-3 bg-red-100 p-2 rounded-full z-10 shadow-sm"
-                    onPress={() => handleDeletePress(trail)}
-                  >
-                    <MaterialIcons name="delete-outline" size={20} color="#ef4444" />
-                  </TouchableOpacity>
-                )}
-
-                <View className="p-4">
-                    <Text className="text-lg font-bold text-slate-800 mb-1">{trail.name}</Text>
-                    <View className="flex-row items-center justify-between mt-3 pt-3 border-t border-slate-100">
-                      <View className="flex-row items-center gap-4">
-                          <View className="flex-row items-center gap-1">
-                              <MaterialIcons name="straighten" size={16} color="#64748b" />
-                              <Text className="text-slate-500 text-sm">{trail.length || "Unknown"}</Text>
-                          </View>
-                          <View className="flex-row items-center gap-1">
-                              <MaterialIcons name="science" size={16} color="#64748b" />
-                              <Text className="text-slate-500 text-sm">{Array.isArray(trail.mushrooms) ? trail.mushrooms.length : 0} species</Text>
-                          </View>
-                      </View>
-                      <View className="flex-row items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-full">
-                        <Text className="text-blue-600 font-bold text-xs">Open Trail</Text>
-                        <MaterialIcons name="arrow-forward" size={14} color="#2563eb" />
-                      </View>
-                    </View>
-                </View>
+                <Ionicons name="add" size={24} color="#fff" />
              </TouchableOpacity>
-          ))}
-          </View>
-        )}
-      </ScrollView>
-
-      {/* Create Trail Options Modal - REMOVED */}
-
-      {/* Load Trail Options Modal - REMOVED */ }
-
-      {/* Delete Confirmation Modal */}
-      <Modal
-        animationType="fade"
-        transparent={true}
-        visible={deleteModalVisible}
-        onRequestClose={() => setDeleteModalVisible(false)}
-      >
-        <View className="flex-1 justify-center items-center bg-black/60 px-6">
-          <View className="bg-white rounded-2xl p-6 w-full gap-4 items-center">
-            <View className="w-16 h-16 bg-red-100 rounded-full items-center justify-center mb-2">
-              <MaterialIcons name="warning-amber" size={32} color="#ef4444" />
-            </View>
-            <Text className="text-xl font-bold text-slate-800 text-center">Delete Trail?</Text>
-            <Text className="text-slate-500 text-center mb-4">
-              Are you sure you want to delete "{selectedTrail?.name}"? This action cannot be undone.
-            </Text>
-            
-            <View className="flex-row gap-3 w-full">
-              <TouchableOpacity 
-                className="flex-1 bg-slate-100 p-4 rounded-xl items-center"
-                onPress={() => {
-                   setDeleteModalVisible(false);
-                   // Maybe reopen load modal? Or just close all.
-                   setSelectedTrail(null);
-                }}
-              >
-                <Text className="text-slate-700 font-bold text-lg">Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                className="flex-1 bg-red-500 p-4 rounded-xl items-center flex-row justify-center gap-2"
-                onPress={confirmDeleteTrail}
-                disabled={isDeleting}
-              >
-                {isDeleting ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <>
-                    <Text className="text-white font-bold text-lg">Delete</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
+           )}
         </View>
-      </Modal>
+        <View style={styles.searchRow}>
+           <View style={[styles.searchBar, { backgroundColor: colors.surfaceMuted }]}>
+             <Ionicons name="search" size={18} color={colors.textMuted} />
+             <TextInput 
+               style={[styles.searchInput, { color: colors.text }]}
+               placeholder="Find your next path..."
+               value={searchQuery}
+               onChangeText={setSearchQuery}
+               placeholderTextColor={colors.textMuted}
+             />
+           </View>
+           <TouchableOpacity style={[styles.filterBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+             <Ionicons name="options-outline" size={20} color={colors.text} />
+           </TouchableOpacity>
+        </View>
+      </SafeAreaView>
 
-    </SafeAreaView>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+        {loading ? (
+          <View style={styles.centerState}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.loadingText, { color: colors.textMuted }]}>Mapping coordinates...</Text>
+          </View>
+        ) : filteredTrails.length === 0 ? (
+          <View style={styles.emptyState}>
+             <FontAwesome5 name="mountain" size={56} color={colors.border} />
+             <Text style={[styles.emptyTitle, { color: colors.text }]}>Trailhead not found</Text>
+             <Text style={[styles.emptyBody, { color: colors.textMuted }]}>Try a different search or location.</Text>
+          </View>
+        ) : (
+          filteredTrails.map((trail) => (
+            <TouchableOpacity 
+              key={trail._id} 
+              style={[styles.trailCard, { backgroundColor: colors.surface }]} 
+              activeOpacity={0.9}
+              onPress={() => router.push({
+                pathname: '/active-trail',
+                params: { trailId: trail._id, skipLocation: 'true' },
+              })}
+            >
+              <View style={styles.imageBox}>
+                <Image
+                  source={{
+                    uri: trail.image || trail.mushrooms?.[0]?.images?.[0]?.url || 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=800',
+                  }}
+                  style={styles.cardImage}
+                  contentFit="cover"
+                />
+                <View style={[styles.diffTag, { backgroundColor: 'rgba(255,255,255,0.92)' }]}>
+                   <Text style={[styles.diffLabel, { color: getDifficultyColor(trail.difficulty) }]}>
+                      {trail.difficulty ? trail.difficulty.toUpperCase() : 'MODERATE'}
+                   </Text>
+                </View>
+                <TouchableOpacity style={styles.favBtn}>
+                   <Ionicons name="heart-outline" size={20} color="#fff" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.cardContent}>
+                 <View style={styles.cardHeader}>
+                    <Text style={[styles.cardTitle, { color: colors.text }]}>{trail.name}</Text>
+                    <View style={styles.ratingRow}>
+                      <Ionicons name="star" size={12} color={colors.accent} />
+                      <Text style={[styles.ratingText, { color: colors.text }]}>4.8</Text>
+                    </View>
+                 </View>
+                 
+                 <Text style={[styles.cardLocation, { color: colors.textMuted }]}>Shimla Forest Reserve • 2.4 km away</Text>
+                 
+                 <View style={styles.statsRow}>
+                    <View style={styles.statChip}>
+                       <MaterialIcons name="straighten" size={14} color={colors.primary} />
+                       <Text style={[styles.statItem, { color: colors.text }]}>{trail.length || '3.2'} km</Text>
+                    </View>
+                    <View style={styles.statChip}>
+                       <MaterialIcons name="schedule" size={14} color={colors.primary} />
+                       <Text style={[styles.statItem, { color: colors.text }]}>1h 45m</Text>
+                    </View>
+                    <View style={styles.statChip}>
+                       <MaterialIcons name="grass" size={14} color={colors.primary} />
+                       <Text style={[styles.statItem, { color: colors.text }]}>{trail.mushrooms?.length || 0} stops</Text>
+                    </View>
+                 </View>
+              </View>
+            </TouchableOpacity>
+          ))
+        )}
+        <View style={{ height: 120 }} />
+      </ScrollView>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  screen: { flex: 1 },
+  headerSafe: { borderBottomWidth: 1, paddingBottom: 16 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 10, marginBottom: 16 },
+  headerTitle: { fontSize: 26, fontWeight: '900', letterSpacing: -0.5 },
+  addBtn: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', ...shadows.soft },
+  searchRow: { flexDirection: 'row', paddingHorizontal: 20, gap: 12 },
+  searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 14, paddingHorizontal: 14, height: 48, gap: 10 },
+  searchInput: { flex: 1, fontSize: 16, fontWeight: '600' },
+  filterBtn: { width: 48, height: 48, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  content: { padding: 20 },
+  trailCard: { borderRadius: 24, overflow: 'hidden', marginBottom: 24, ...shadows.card },
+  imageBox: { width: '100%', height: 180 },
+  cardImage: { width: '100%', height: '100%' },
+  diffTag: { position: 'absolute', top: 12, left: 12, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
+  diffLabel: { fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
+  favBtn: { position: 'absolute', top: 12, right: 12, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.2)', alignItems: 'center', justifyContent: 'center' },
+  cardContent: { padding: 18 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  cardTitle: { fontSize: 19, fontWeight: '900' },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  ratingText: { fontSize: 12, fontWeight: '800' },
+  cardLocation: { fontSize: 13, fontWeight: '600', marginBottom: 16 },
+  statsRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  statChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(46,125,50,0.06)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, gap: 6 },
+  statItem: { fontSize: 13, fontWeight: '700' },
+  centerState: { paddingVertical: 120, alignItems: 'center', gap: 16 },
+  loadingText: { fontSize: 15, fontWeight: '700' },
+  emptyState: { paddingVertical: 100, alignItems: 'center', gap: 16 },
+  emptyTitle: { fontSize: 20, fontWeight: '900', marginTop: 10 },
+  emptyBody: { fontSize: 14, fontWeight: '600', textAlign: 'center' }
+});

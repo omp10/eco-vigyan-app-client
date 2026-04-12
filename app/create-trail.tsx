@@ -9,122 +9,76 @@ import {
   StyleSheet,
   Dimensions,
   Platform,
-  Image
+  ScrollView
 } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
-// import MapViewDirections from 'react-native-maps-directions'; // Removed
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-// import * as Location from 'expo-location'; // Removed: Only required in active-trail
 import { trailService, mushroomService, Mushroom } from '../services/api';
-import { mapService, LatLng } from '../services/mapService';  // Added mapService
+import { mapService, LatLng } from '../services/mapService';
 import { useAuth } from '../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppTheme, shadows } from '@/constants/app-theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
 
-// Helper to calculate distance between two coordinates in km
-function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
-  var R = 6371; // Radius of the earth in km
-  var dLat = deg2rad(lat2-lat1);  // deg2rad below
-  var dLon = deg2rad(lon2-lon1); 
-  var a = 
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2)
-    ; 
-  var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-  var d = R * c; // Distance in km
-  return d;
-}
+const mapStyle = [
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+];
 
-function deg2rad(deg: number) {
-  return deg * (Math.PI/180)
-}
-
-  export default function CreateTrailScreen() {
+export default function CreateTrailScreen() {
   const router = useRouter();
   const { user, isAuthenticated } = useAuth();
-  const params = useLocalSearchParams();
-
   const mapRef = useRef<MapView>(null);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingMushrooms, setLoadingMushrooms] = useState(true);
   const [allMushrooms, setAllMushrooms] = useState<Mushroom[]>([]);
   const [name, setName] = useState("");
+  const [difficulty, setDifficulty] = useState("Moderate");
   
-  // Trail state
   const [selectedMushrooms, setSelectedMushrooms] = useState<Mushroom[]>([]);
   const [totalDistance, setTotalDistance] = useState(0);
   const [routeCoordinates, setRouteCoordinates] = useState<LatLng[]>([]);
 
-  // Initial region (India center or user location)
   const [region, setRegion] = useState({
     latitude: 20.5937,
     longitude: 78.9629,
-    latitudeDelta: 20,
-    longitudeDelta: 20,
+    latitudeDelta: 2,
+    longitudeDelta: 2,
   });
 
-  // Track zoom level for performance optimization
-  const [currentZoom, setCurrentZoom] = useState(20); // Start zoomed out
-
-  // Memoize selected mushroom IDs for O(1) lookup instead of O(n) for each marker
-  const selectedMushroomIds = useMemo(() => {
-    return new Set(selectedMushrooms.map(m => m._id));
-  }, [selectedMushrooms]);
-
-  // Create a map of mushroom ID to sequence number for selected mushrooms
-  const selectedMushroomSequence = useMemo(() => {
-    const map = new Map<string, number>();
-    selectedMushrooms.forEach((m, index) => {
-      map.set(m._id, index + 1);
-    });
-    return map;
-  }, [selectedMushrooms]);
-
   useEffect(() => {
-    // Check admin
     if (isAuthenticated && user?.role !== 'admin') {
-      Alert.alert('Access Denied', 'Only admins can create trails.', [
-        { text: 'OK', onPress: () => router.back() }
-      ]);
+      Alert.alert('Access Denied', 'Only admins can create trails.', [{ text: 'OK', onPress: () => router.back() }]);
       return;
     }
-
-    // Fetch mushrooms and location
     loadInitialData();
-  }, [user, isAuthenticated]);
+  }, []);
 
   const loadInitialData = async () => {
     try {
       setLoadingMushrooms(true);
-      
-      // Location request removed from this screen
-
-      // Load mushrooms inside here...
-
-      // Load mushrooms
-      console.log('Fetching all mushrooms for map...');
       const mushrooms = await mushroomService.getAllMushrooms();
-      console.log('Fetched mushrooms count:', mushrooms.length);
-      if (mushrooms.length > 0) {
-        console.log('First mushroom location:', mushrooms[0].location);
-      }
       setAllMushrooms(mushrooms);
-
-      // Keep map at India center view - user can zoom/pan as needed
-
+      if (mushrooms.length > 0) {
+        setRegion({
+          ...mushrooms[0].location,
+          latitudeDelta: 0.1,
+          longitudeDelta: 0.1,
+        });
+      }
     } catch (error) {
-      console.error('Error loading data:', error);
       Alert.alert('Error', 'Failed to load mushrooms');
     } finally {
       setLoadingMushrooms(false);
     }
   };
 
-  // Update route and total distance when selection changes
   useEffect(() => {
     const fetchPath = async () => {
       if (selectedMushrooms.length < 2) {
@@ -132,31 +86,20 @@ function deg2rad(deg: number) {
         setRouteCoordinates([]);
         return;
       }
-  
       try {
         const origin = selectedMushrooms[0].location;
         const destination = selectedMushrooms[selectedMushrooms.length - 1].location;
         const waypoints = selectedMushrooms.slice(1, -1).map(m => m.location);
-  
         const result = await mapService.fetchRoute(origin, destination, waypoints);
         if (result) {
           setRouteCoordinates(result.polyline);
-          setTotalDistance(result.distanceMeters / 1000); // Convert meters to km
+          setTotalDistance(result.distanceMeters / 1000);
         }
       } catch (error) {
         console.error("Failed to fetch route:", error);
-         // Fallback to straight lines if API fails? Or just show markers.
-         // For now, let's just log it.
       }
     };
-
-    // Debounce route fetching by 500ms to prevent excessive API calls
-    const timeoutId = setTimeout(() => {
-      fetchPath();
-    }, 500);
-
-    return () => clearTimeout(timeoutId);
-    
+    fetchPath();
   }, [selectedMushrooms]);
 
   const toggleMushroomSelection = (mushroom: Mushroom) => {
@@ -171,58 +114,32 @@ function deg2rad(deg: number) {
   };
 
   const handleSubmit = async () => {
-    if (!name.trim()) {
-      Alert.alert('Error', 'Please enter a trail name');
-      return;
-    }
-
-    if (selectedMushrooms.length < 2) {
-      Alert.alert('Error', 'Please select at least 2 mushrooms to form a trail');
-      return;
-    }
+    if (!name.trim()) return Alert.alert('Error', 'Please enter a trail name');
+    if (selectedMushrooms.length < 2) return Alert.alert('Error', 'Select at least 2 stops');
 
     setIsSubmitting(true);
-
     try {
       const token = await AsyncStorage.getItem('@ecovigyan_auth_token');
-      if (!token) throw new Error('No auth token found');
-
-      const startNode = selectedMushrooms[0];
-
-      // Calculate center based on all points
       const lats = selectedMushrooms.map(m => m.location.latitude);
       const longs = selectedMushrooms.map(m => m.location.longitude);
-      const minLat = Math.min(...lats);
-      const maxLat = Math.max(...lats);
-      const minLng = Math.min(...longs);
-      const maxLng = Math.max(...longs);
-
       const payload = {
         name,
+        difficulty,
+        length: totalDistance.toFixed(1),
         location: {
           type: 'trail',
-          currentLocation: startNode.location, // Start point
+          currentLocation: selectedMushrooms[0].location,
           center: {
-            latitude: (minLat + maxLat) / 2,
-            longitude: (minLng + maxLng) / 2
+            latitude: (Math.min(...lats) + Math.max(...lats)) / 2,
+            longitude: (Math.min(...longs) + Math.max(...longs)) / 2
           }
         },
-        mushrooms: selectedMushrooms // Pass full objects, backend schema supports Mixed
+        mushrooms: selectedMushrooms
       };
-
-      await trailService.createTrail(payload, token);
-      
-      Alert.alert('Success', 'Trail created successfully!', [
-        { 
-          text: 'OK', 
-          onPress: () => {
-            router.back();
-          } 
-        }
-      ]);
+      await trailService.createTrail(payload, token!);
+      Alert.alert('Success', 'Trail published!', [{ text: 'Awesome', onPress: () => router.back() }]);
     } catch (error: any) {
-      console.error('Submission error:', error);
-      Alert.alert('Error', error.message || 'Failed to create trail');
+      Alert.alert('Error', 'Failed to create trail');
     } finally {
       setIsSubmitting(false);
     }
@@ -230,118 +147,89 @@ function deg2rad(deg: number) {
 
   return (
     <View style={styles.container}>
-      {/* Map Background */}
+      <StatusBar style="dark" />
+      
       <MapView
         ref={mapRef}
         provider={PROVIDER_GOOGLE}
         style={styles.map}
         initialRegion={region}
-        onRegionChangeComplete={(newRegion) => {
-          setCurrentZoom(newRegion.latitudeDelta);
-        }}
-        showsUserLocation={false}
-        showsMyLocationButton={false}
+        customMapStyle={mapStyle}
       >
-        {/* Draw Line between selected mushrooms - only when zoomed in */}
-        {currentZoom <= 1 && selectedMushrooms.length > 1 && routeCoordinates.length > 0 && (
+        {routeCoordinates.length > 0 && (
           <Polyline
             coordinates={routeCoordinates}
-            strokeWidth={6}
-            strokeColor="#4285F4"
+            strokeWidth={4}
+            strokeColor={AppTheme.colors.primary}
             lineCap="round"
-            lineJoin="round"
           />
         )}
 
-        {/* Render markers - use simple markers when zoomed out for performance */}
-        {currentZoom > 1 ? (
-          // Zoomed out: simple native markers
-          allMushrooms.map((m) => {
-            const isSelected = selectedMushroomIds.has(m._id);
-            return (
-              <Marker
-                key={m._id}
-                coordinate={m.location}
-                onPress={() => toggleMushroomSelection(m)}
-                pinColor={isSelected ? "#387a63" : "#cbd5e1"}
-              />
-            );
-          })
-        ) : (
-          // Zoomed in: custom markers with selection UI
-          allMushrooms.map((m) => {
-            const isSelected = selectedMushroomIds.has(m._id);
-            const sequenceNumber = selectedMushroomSequence.get(m._id);
-
-            return (
-              <Marker
-                key={m._id}
-                coordinate={m.location}
-                onPress={() => toggleMushroomSelection(m)}
-                opacity={isSelected ? 1 : 0.6}
-                zIndex={isSelected ? 100 + (sequenceNumber || 0) : 1}
-              >
-                <View style={[styles.markerContainer, isSelected && styles.markerSelected]}>
-                  {isSelected && sequenceNumber ? (
-                    <Text style={styles.markerNumber}>{sequenceNumber}</Text>
+        {allMushrooms.map((m) => {
+          const index = selectedMushrooms.findIndex(s => s._id === m._id);
+          const isSelected = index !== -1;
+          return (
+            <Marker
+              key={m._id}
+              coordinate={m.location}
+              onPress={() => toggleMushroomSelection(m)}
+              zIndex={isSelected ? 100 : 1}
+            >
+               <View style={[styles.marker, isSelected && styles.markerActive]}>
+                  {isSelected ? (
+                    <Text style={styles.markerText}>{index + 1}</Text>
                   ) : (
                     <View style={styles.markerDot} />
                   )}
-                </View>
-              </Marker>
-            );
-          })
-        )}
+               </View>
+            </Marker>
+          );
+        })}
       </MapView>
 
-      {/* Header Overlay */}
-      <View style={styles.headerOverlay}>
-        <View style={styles.headerTitleRow}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <MaterialIcons name="arrow-back" size={24} color="#333" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Create Trail</Text>
-        </View>
-        <TextInput
-          value={name}
-          onChangeText={setName}
-          placeholder="Trail Name"
-          style={styles.nameInput}
-          placeholderTextColor="#666"
-        />
-      </View>
+      <SafeAreaView style={styles.overlay} edges={['top']}>
+         <View style={styles.headerCard}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
+               <Ionicons name="close" size={24} color={AppTheme.colors.text} />
+            </TouchableOpacity>
+            <View style={styles.headerInfo}>
+               <TextInput 
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Untitled Trail"
+                  style={styles.nameInput}
+                  placeholderTextColor={AppTheme.colors.textMuted}
+               />
+               <Text style={styles.headerLabel}>Tap markers to add stops</Text>
+            </View>
+            <TouchableOpacity style={styles.saveBtn} onPress={handleSubmit} disabled={isSubmitting}>
+               {isSubmitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveBtnText}>Save</Text>}
+            </TouchableOpacity>
+         </View>
+      </SafeAreaView>
 
-      {/* Footer Overlay */}
-      <View style={styles.footerOverlay}>
-        <View style={styles.statsRow}>
-          <View>
-            <Text style={styles.statsLabel}>Stops</Text>
-            <Text style={styles.statsValue}>{selectedMushrooms.length}</Text>
-          </View>
-          <View>
-            <Text style={styles.statsLabel}>Distance</Text>
-            <Text style={styles.statsValue}>{totalDistance.toFixed(2)} km</Text>
-          </View>
-        </View>
-        
-        <Text style={styles.instructionText}>
-          Tap mushrooms on the map to add them to your trail in order.
-        </Text>
-
-        <TouchableOpacity 
-          onPress={handleSubmit}
-          disabled={isSubmitting}
-          style={[styles.submitBtn, isSubmitting && { opacity: 0.7 }]}
-        >
-          {isSubmitting ? <ActivityIndicator color="#fff" /> : (
-            <Text style={styles.submitBtnText}>Create Trail</Text>
-          )}
-        </TouchableOpacity>
+      <View style={styles.footer}>
+         <View style={styles.statsRow}>
+            <View style={styles.statBox}>
+               <Text style={styles.statVal}>{selectedMushrooms.length}</Text>
+               <Text style={styles.statLab}>Stops</Text>
+            </View>
+            <View style={styles.statBox}>
+               <Text style={styles.statVal}>{totalDistance.toFixed(1)} km</Text>
+               <Text style={styles.statLab}>Distance</Text>
+            </View>
+            <View style={styles.statBox}>
+               <TouchableOpacity onPress={() => setDifficulty(d => d === 'Easy' ? 'Moderate' : d === 'Moderate' ? 'Hard' : 'Easy')}>
+                  <Text style={[styles.statVal, { color: AppTheme.colors.primaryDeep }]}>{difficulty}</Text>
+                  <Text style={styles.statLab}>Difficulty</Text>
+               </TouchableOpacity>
+            </View>
+         </View>
       </View>
 
       {loadingMushrooms && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#387a63" />
+        <View style={styles.loader}>
+          <ActivityIndicator size="large" color={AppTheme.colors.primary} />
         </View>
       )}
     </View>
@@ -351,97 +239,120 @@ function deg2rad(deg: number) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   map: { width: '100%', height: '100%' },
-  
-  headerOverlay: {
+  overlay: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 60 : 40,
-    left: 20,
-    right: 20,
+    top: 0,
+    left: 0,
+    right: 0,
+    padding: 20,
+  },
+  headerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.95)',
-    padding: 16,
-    borderRadius: 16,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    gap: 12
+    borderRadius: 24,
+    padding: 12,
+    gap: 12,
+    ...shadows.card,
   },
-  headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  backBtn: { padding: 4 },
-  headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#1e293b' },
-  nameInput: { 
-    backgroundColor: '#f1f5f9', 
-    padding: 12, 
-    borderRadius: 10, 
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0'
+  closeBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: AppTheme.colors.surfaceMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-
-  footerOverlay: {
+  headerInfo: {
+    flex: 1,
+  },
+  nameInput: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: AppTheme.colors.text,
+    padding: 0,
+  },
+  headerLabel: {
+    fontSize: 11,
+    color: AppTheme.colors.primary,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  saveBtn: {
+    backgroundColor: AppTheme.colors.primary,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 14,
+    ...shadows.soft,
+  },
+  saveBtnText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 14,
+  },
+  footer: {
     position: 'absolute',
-    bottom: 30,
+    bottom: 40,
     left: 20,
     right: 20,
     backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 24,
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 15,
-    shadowOffset: { width: 0, height: 4 }
+    borderRadius: 30,
+    padding: 24,
+    ...shadows.soft,
   },
-  statsRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 16 },
-  statsLabel: { fontSize: 12, color: '#64748b', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: 4 },
-  statsValue: { fontSize: 20, color: '#0f172a', fontWeight: '900' },
-  instructionText: { textAlign: 'center', color: '#64748b', fontSize: 12, marginBottom: 16 },
-  
-  submitBtn: {
-    backgroundColor: '#387a63',
-    paddingVertical: 16,
-    borderRadius: 16,
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  statBox: {
     alignItems: 'center',
+    flex: 1,
   },
-  submitBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 100
+  statVal: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: AppTheme.colors.text,
   },
-
-  markerContainer: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+  statLab: {
+    fontSize: 12,
+    color: AppTheme.colors.textMuted,
+    marginTop: 4,
+    fontWeight: '600',
+  },
+  marker: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: '#fff',
     borderWidth: 2,
-    borderColor: '#387a63',
-    justifyContent: 'center',
+    borderColor: AppTheme.colors.border,
     alignItems: 'center',
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    justifyContent: 'center',
+    ...shadows.soft,
   },
-  markerSelected: {
-    backgroundColor: '#387a63',
+  markerActive: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: AppTheme.colors.primary,
     borderColor: '#fff',
-    transform: [{ scale: 1.2 }]
+    borderWidth: 3,
   },
   markerDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#387a63'
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: AppTheme.colors.textMuted,
   },
-  markerNumber: {
+  markerText: {
     color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 12
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  loader: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
   }
 });
