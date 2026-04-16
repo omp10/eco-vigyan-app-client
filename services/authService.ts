@@ -154,7 +154,7 @@ class AuthService {
 
       return { user, token };
     } catch (error: any) {
-      console.error('Login Error:', error);
+      console.error('Login Error:', error.response?.data || error.message);
       throw error;
     }
   }
@@ -240,8 +240,10 @@ class AuthService {
       }
 
       return null;
-    } catch (error) {
-      console.error('Token verification error:', error);
+    } catch (error: any) {
+      console.error('Token verification error:', error.response?.data || error.message);
+      await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+      await AsyncStorage.removeItem(USER_KEY);
       return null;
     }
   }
