@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, Alert, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
+import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -25,18 +26,48 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const handleGoogleSignIn = async () => {
+  const [, googleResponse, promptGoogleSignIn] = Google.useIdTokenAuthRequest({
+    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || undefined,
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    scopes: ['openid', 'profile', 'email'],
+  });
+
+  useEffect(() => {
+    const completeGoogleSignIn = async () => {
+      if (googleResponse?.type !== 'success') {
+        return;
+      }
+
+      const idToken = googleResponse.params.id_token;
+      if (!idToken) {
+        Alert.alert('Error', 'Google did not return an ID token');
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const { user } = await authService.loginWithGoogleIdToken(idToken);
+        setAuthUser(user);
+        router.replace('/(tabs)');
+      } catch (error: any) {
+        console.error(error.response?.data || error.message);
+        Alert.alert('Error', error.response?.data?.message || error.response?.data?.error || error.message || 'Google sign in failed');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    completeGoogleSignIn();
+  }, [googleResponse, router, setAuthUser]);
+
+  const handleGoogleSignIn = () => {
     setLoading(true);
-    try {
-      const { user } = await authService.googleSignIn();
-      setAuthUser(user);
-      router.replace('/(tabs)');
-    } catch (error: any) {
+    promptGoogleSignIn().catch((error) => {
       console.error(error);
       Alert.alert('Error', error.message || 'Google sign in failed');
-    } finally {
       setLoading(false);
-    }
+    });
   };
 
   const handleLogin = async () => {
