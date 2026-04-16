@@ -36,7 +36,7 @@ export default function LoginScreen() {
 
   const handleGoogleSignIn = async () => {
     try {
-      const result = await promptAsync({ useProxy: true });
+      const result = await promptAsync();
       if (result.type === 'success' && result.params.id_token) {
         setLoading(true);
         const { user } = await authService.loginWithGoogleIdToken(result.params.id_token);

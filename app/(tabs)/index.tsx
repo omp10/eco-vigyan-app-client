@@ -165,7 +165,7 @@ export default function HomeScreen() {
 
         <View style={styles.sightingsGrid}>
            {loadingSightings ? (
-             <Text style={[styles.loadingText, { color: colors.textMuted }]}>Loading nature's finds...</Text>
+             <Text style={[styles.loadingText, { color: colors.textMuted }]}>Loading nature&apos;s finds...</Text>
            ) : (
              recentSightings.map(m => (
                <SightingCard 

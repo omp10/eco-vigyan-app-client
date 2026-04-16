@@ -366,7 +366,7 @@ export default function ActiveTrailScreen() {
         center: loc,
         pitch: navStarted ? 58 : 0,
         zoom: navStarted ? 18 : 16.2,
-        heading: mode === 'heading' ? loc.heading || 0 : 0,
+        heading: mode === 'heading' ? ((loc as LatLng & { heading?: number }).heading || 0) : 0,
         altitude: 400,
       },
       { duration: 700 }

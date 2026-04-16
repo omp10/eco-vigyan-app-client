@@ -59,7 +59,7 @@ export default function MushroomDetailsScreen() {
   if (error || !mushroom) {
     return (
       <View style={styles.center}>
-        <Ionicons name="alert-circle-outline" size={48} color={AppTheme.colors.error} />
+        <Ionicons name="alert-circle-outline" size={48} color={AppTheme.colors.danger} />
         <Text style={styles.errorText}>Observation not found</Text>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Text style={styles.backBtnText}>Go Back</Text>

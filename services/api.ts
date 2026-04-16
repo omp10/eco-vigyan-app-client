@@ -2,14 +2,15 @@ import axios from 'axios';
 import { Platform } from 'react-native';
 
 function resolveApiUrl() {
-  const rawUrl = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api').trim();
+  const rawUrl = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/v1').trim();
   const isLocalhost = /https?:\/\/(localhost|127\.0\.0\.1)/i.test(rawUrl);
+  const normalizedApiVersion = rawUrl.replace(/\/api\/?$/i, '/v1').replace(/\/+$/g, '');
 
   if (!isLocalhost) {
-    return rawUrl;
+    return normalizedApiVersion;
   }
 
-  let normalizedUrl = rawUrl.replace(/^https:/i, 'http:');
+  let normalizedUrl = normalizedApiVersion.replace(/^https:/i, 'http:');
 
   if (Platform.OS === 'android') {
     normalizedUrl = normalizedUrl.replace(/localhost|127\.0\.0\.1/i, '10.0.2.2');
@@ -32,7 +33,7 @@ export function getFungusImageUrl(url?: string) {
   if (!url) return null;
   if (url.startsWith('http')) return url;
   
-  const BASE_URL = API_URL.endsWith('/api') ? API_URL.slice(0, -4) : API_URL;
+  const BASE_URL = API_URL.replace(/\/(?:api|v1)\/?$/i, '');
   const relativePath = url.startsWith('/') ? url : `/${url}`;
   return `${BASE_URL}${relativePath}`;
 }
@@ -100,7 +101,7 @@ export const mushroomService = {
 
   async getMushroomsByUser(userId: string): Promise<Mushroom[]> {
     try {
-      const response = await api.get(`/mushrooms/user/${userId}`);
+      const response = await api.get(`/users/${userId}/mushrooms`);
       return response.data;
     } catch (error: any) {
       console.error('Error fetching user mushrooms:', error.message);

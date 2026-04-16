@@ -49,7 +49,7 @@ class AuthService {
       });
 
       console.log('🌐 Opening Google OAuth...');
-      const result = await request.promptAsync(discovery, { useProxy: true });
+      const result = await request.promptAsync(discovery);
 
       console.log('📥 OAuth Result:', result.type);
 
@@ -92,7 +92,7 @@ class AuthService {
   async loginWithGoogleIdToken(idToken: string): Promise<{ user: User; token: string }> {
       try {
         // Send ID token to backend for verification
-        const response = await api.post('/auth/google', {
+        const response = await api.post('/auth/oauth/google', {
             idToken,
         });
 
@@ -209,7 +209,7 @@ class AuthService {
    */
   async verifyToken(token: string): Promise<User | null> {
     try {
-      const response = await api.get('/auth/verify', {
+      const response = await api.get('/auth/me', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
