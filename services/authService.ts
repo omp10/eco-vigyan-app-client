@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
+import { Platform } from 'react-native';
 import api from './api';
 
 const AUTH_TOKEN_KEY = '@ecovigyan_auth_token';
@@ -24,12 +25,29 @@ const discovery = {
   tokenEndpoint: 'https://oauth2.googleapis.com/token',
 };
 
+function getGoogleClientId() {
+  if (Platform.OS === 'android') {
+    return process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || '';
+  }
+
+  if (Platform.OS === 'ios') {
+    return process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '';
+  }
+
+  return process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '';
+}
+
 class AuthService {
   /**
    * Sign in with Google using Expo Auth Session
    */
   async googleSignIn(): Promise<{ user: User; token: string }> {
     try {
+      const clientId = getGoogleClientId();
+      if (!clientId) {
+        throw new Error(`Missing Google ${Platform.OS} client ID in .env`);
+      }
+
       const redirectUri = 'https://auth.expo.io/@ecovigyan/client';
       // const redirectUri = AuthSession.makeRedirectUri({ ... });
       // Fallback manual override if above fails to generate auth.expo.io
@@ -39,7 +57,7 @@ class AuthService {
       console.log('📍 Redirect URI:', redirectUri);
 
       const request = new AuthSession.AuthRequest({
-        clientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '',
+        clientId,
         scopes: ['openid', 'profile', 'email'],
         redirectUri,
         responseType: AuthSession.ResponseType.IdToken,

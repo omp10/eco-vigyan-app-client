@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, Alert, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
-import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -26,25 +25,12 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  // Google Auth
-  const redirectUri = 'https://auth.expo.io/@ecovigyan/client';
-  const [, , promptAsync] = Google.useAuthRequest({
-    clientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-    redirectUri,
-    scopes: ['openid', 'profile', 'email'],
-  });
-
   const handleGoogleSignIn = async () => {
+    setLoading(true);
     try {
-      const result = await promptAsync();
-      if (result.type === 'success' && result.params.id_token) {
-        setLoading(true);
-        const { user } = await authService.loginWithGoogleIdToken(result.params.id_token);
-        setAuthUser(user);
-        router.replace('/(tabs)');
-      } else if (result.type === 'error') {
-        Alert.alert('Error', 'Google sign in failed');
-      }
+      const { user } = await authService.googleSignIn();
+      setAuthUser(user);
+      router.replace('/(tabs)');
     } catch (error: any) {
       console.error(error);
       Alert.alert('Error', error.message || 'Google sign in failed');
